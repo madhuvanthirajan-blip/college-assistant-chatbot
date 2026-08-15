@@ -113,14 +113,41 @@ header,
    CHAT INPUT
    ---------------------------------------------------------- */
 
+/* ----------------------------------------------------------
+   CHAT INPUT + FIXED BOTTOM AREA
+   Keep the entire chat-input area the same background
+   as the rest of the application.
+   ---------------------------------------------------------- */
+
+[data-testid="stBottom"] {
+    background-color: #F6F3FB !important;
+    background: #F6F3FB !important;
+}
+
+[data-testid="stBottom"] > div {
+    background-color: #F6F3FB !important;
+    background: #F6F3FB !important;
+}
+
 [data-testid="stChatInput"] {
     background-color: #F6F3FB !important;
+    background: #F6F3FB !important;
     border: 1px solid #DED6EC !important;
+    box-shadow: none !important;
 }
 
 [data-testid="stChatInput"] > div {
     background-color: #F6F3FB !important;
+    background: #F6F3FB !important;
     border: 1px solid #DED6EC !important;
+    box-shadow: none !important;
+}
+
+[data-testid="stChatInput"] form {
+    background-color: #F6F3FB !important;
+    background: #F6F3FB !important;
+    border: none !important;
+    box-shadow: none !important;
 }
 
 [data-testid="stChatInput"] textarea {
