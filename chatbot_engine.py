@@ -1,14 +1,19 @@
-import os
 import re
-from typing import Optional, Tuple, List, Dict
+from collections import Counter, defaultdict
+from typing import Optional, List, Dict, Tuple
 
 import pandas as pd
 
 from data_loader import load_college_data
 
+try:
+    from llm import ask_llm
+except Exception:
+    ask_llm = None
+
 
 # ============================================================
-# CATEGORIES
+# CONSTANTS
 # ============================================================
 
 CATEGORIES = [
@@ -23,10 +28,273 @@ CATEGORIES = [
 
 
 # ============================================================
-# BRANCH ALIASES
+# DISTRICT ALIASES
 # ============================================================
 
-BRANCH_ALIASES = {
+DISTRICTS = {
+
+    "Ariyalur": [
+        "ariyalur",
+    ],
+
+    "Chengalpattu": [
+        "chengalpattu",
+        "chenglepet",
+        "chengalpet",
+    ],
+
+    "Chennai": [
+        "chennai",
+        "madras",
+    ],
+
+    "Coimbatore": [
+        "coimbatore",
+        "kovai",
+    ],
+
+    "Cuddalore": [
+        "cuddalore",
+    ],
+
+    "Dharmapuri": [
+        "dharmapuri",
+    ],
+
+    "Dindigul": [
+        "dindigul",
+    ],
+
+    "Erode": [
+        "erode",
+    ],
+
+    "Kallakurichi": [
+        "kallakurichi",
+        "chinnasalem",
+    ],
+
+    "Kanchipuram": [
+        "kancheepuram",
+        "kanchipuram",
+    ],
+
+    "Kanyakumari": [
+        "kanyakumari",
+        "kanyakumarai",
+    ],
+
+    "Karur": [
+        "karur",
+    ],
+
+    "Krishnagiri": [
+        "krishnagiri",
+    ],
+
+    "Madurai": [
+        "madurai",
+    ],
+
+    "Mayiladuthurai": [
+        "mayiladuthurai",
+        "mayavaram",
+    ],
+
+    "Nagapattinam": [
+        "nagapattinam",
+        "nagappattinam",
+    ],
+
+    "Namakkal": [
+        "namakkal",
+    ],
+
+    "The Nilgiris": [
+        "the nilgiris",
+        "nilgiris",
+        "ooty",
+    ],
+
+    "Perambalur": [
+        "perambalur",
+        "elambalur",
+    ],
+
+    "Pudukkottai": [
+        "pudukkottai",
+    ],
+
+    "Ramanathapuram": [
+        "ramanathapuram",
+        "ramnad",
+    ],
+
+    "Salem": [
+        "salem",
+    ],
+
+    "Sivaganga": [
+        "sivaganga",
+        "sivagangai",
+        "sivaganagi",
+    ],
+
+    "Tenkasi": [
+        "tenkasi",
+        "ayikudy",
+    ],
+
+    "Thanjavur": [
+        "thanjavur",
+        "tanjore",
+    ],
+
+    "Theni": [
+        "theni",
+    ],
+
+    "Thoothukudi": [
+        "thoothukudi",
+        "tuticorin",
+    ],
+
+    "Tiruchirappalli": [
+        "tiruchirappalli",
+        "tiruchirapalli",
+        "trichy",
+        "tiruchi",
+    ],
+
+    "Tirunelveli": [
+        "tirunelveli",
+        "tirunelvei",
+        "nellai",
+    ],
+
+    "Tirupattur": [
+        "tirupattur",
+        "tirupathur",
+    ],
+
+    "Tiruppur": [
+        "tiruppur",
+        "tirupur",
+    ],
+
+    "Tiruvallur": [
+        "tiruvallur",
+        "thiruvallur",
+    ],
+
+    "Tiruvannamalai": [
+        "tiruvannamalai",
+        "thiruvannamalai",
+    ],
+
+    "Tiruvarur": [
+        "tiruvarur",
+        "thiruvarur",
+    ],
+
+    "Vellore": [
+        "vellore",
+    ],
+
+    "Villupuram": [
+        "villupuram",
+        "viluppuram",
+    ],
+
+    "Virudhunagar": [
+        "virudhunagar",
+    ],
+}
+
+
+# ============================================================
+# CHENGALPATTU SPECIAL LOCALITIES
+# ============================================================
+
+CHENGALPATTU_HINTS = [
+
+    "siruseri",
+    "egattur",
+    "kattankulathur",
+    "chengalpattu",
+    "chenglepet",
+    "mamallapuram",
+    "mahabalipuram",
+    "poonjeri",
+    "maraimalai nagar",
+    "maraimalainagar",
+    "vandalur",
+    "madurantakam",
+    "thiruporur",
+    "kelambakkam",
+    "kazhipattur",
+    "singaperumal koil",
+    "singaperumalkoil",
+
+]
+
+
+# ============================================================
+# PINCODE FALLBACK
+# ============================================================
+
+PIN_PREFIX = {
+
+    "603": "Chengalpattu",
+
+    "621": "Tiruchirappalli",
+
+    "622": "Pudukkottai",
+
+    "623": "Ramanathapuram",
+
+    "624": "Dindigul",
+
+    "625": "Madurai",
+
+    "626": "Virudhunagar",
+
+    "627": "Tirunelveli",
+
+    "628": "Thoothukudi",
+
+    "629": "Kanyakumari",
+
+    "630": "Sivaganga",
+
+    "631": "Kanchipuram",
+
+    "632": "Vellore",
+
+    "635": "Krishnagiri",
+
+    "636": "Salem",
+
+    "637": "Namakkal",
+
+    "638": "Erode",
+
+    "639": "Karur",
+
+    "641": "Coimbatore",
+
+    "642": "Coimbatore",
+
+    "643": "The Nilgiris",
+
+}
+
+
+# ============================================================
+# BRANCHES
+# ============================================================
+
+BRANCHES = {
 
     "CSE": [
         "cse",
@@ -49,7 +317,6 @@ BRANCH_ALIASES = {
         "ai data science",
         "ai and data science",
         "artificial intelligence and data science",
-        "artificial intelligence & data science",
         "aids",
     ],
 
@@ -58,15 +325,12 @@ BRANCH_ALIASES = {
         "ai&ml",
         "ai and ml",
         "ai machine learning",
-        "ai and machine learning",
         "artificial intelligence and machine learning",
-        "artificial intelligence & machine learning",
         "aiml",
     ],
 
     "ECE": [
         "ece",
-        "electronics",
         "electronics communication",
         "electronics and communication",
         "electronics and communication engineering",
@@ -74,14 +338,12 @@ BRANCH_ALIASES = {
 
     "EEE": [
         "eee",
-        "electrical",
         "electrical electronics",
         "electrical and electronics",
         "electrical and electronics engineering",
     ],
 
     "MECHANICAL": [
-        "mech",
         "mechanical",
         "mechanical engineering",
     ],
@@ -92,7 +354,6 @@ BRANCH_ALIASES = {
     ],
 
     "AERONAUTICAL": [
-        "aero",
         "aeronautical",
         "aeronautical engineering",
     ],
@@ -103,10 +364,9 @@ BRANCH_ALIASES = {
     ],
 
     "BIOTECHNOLOGY": [
-        "biotech",
-        "bio tech",
         "biotechnology",
-        "biotechnology engineering",
+        "bio technology",
+        "biotech",
     ],
 
     "CHEMICAL": [
@@ -115,8 +375,6 @@ BRANCH_ALIASES = {
     ],
 
     "AGRICULTURAL": [
-        "agri",
-        "agriculture",
         "agricultural",
         "agricultural engineering",
     ],
@@ -127,7 +385,7 @@ BRANCH_ALIASES = {
 # CATEGORY ALIASES
 # ============================================================
 
-CATEGORY_ALIASES = {
+CATEGORIES_ALIASES = {
 
     "OC": [
         "oc",
@@ -135,19 +393,17 @@ CATEGORY_ALIASES = {
         "open category",
         "general",
         "general category",
-        "open competition",
     ],
 
     "BC": [
         "bc",
-        "bc category",
         "backward class",
         "backward classes",
+        "bc category",
     ],
 
     "BCM": [
         "bcm",
-        "bcm category",
         "bc muslim",
         "backward class muslim",
         "backward classes muslim",
@@ -155,198 +411,73 @@ CATEGORY_ALIASES = {
 
     "MBC": [
         "mbc",
-        "mbc category",
         "most backward class",
         "most backward classes",
+        "mbc category",
     ],
 
     "SC": [
         "sc",
-        "sc category",
         "scheduled caste",
+        "sc category",
     ],
 
     "SCA": [
         "sca",
-        "sca category",
         "scheduled caste arunthathiyar",
         "arunthathiyar",
     ],
 
     "ST": [
         "st",
-        "st category",
         "scheduled tribe",
+        "st category",
     ],
 }
 
 
 # ============================================================
-# DISTRICT ALIASES
+# COLLEGE TYPE
 # ============================================================
 
-DISTRICT_ALIASES = {
+TYPE_ALIASES = {
 
-    "Chennai": [
-        "chennai",
-        "madras",
+    "AUTONOMOUS": [
+        "autonomous",
+        "autonomous college",
+        "autonomous institution",
     ],
 
-    "Coimbatore": [
-        "coimbatore",
-        "kovai",
+    "GOVERNMENT": [
+        "government",
+        "government college",
+        "govt",
+        "govt college",
+        "government engineering college",
+        "government college of engineering",
+        "university college of engineering",
+        "university departments of anna university",
+        "anna university regional campus",
     ],
 
-    "Madurai": [
-        "madurai",
+    "AIDED": [
+        "government aided",
+        "government-aided",
+        "govt aided",
+        "govt-aided",
     ],
 
-    "Tiruchirappalli": [
-        "tiruchirappalli",
-        "tiruchirapalli",
-        "trichy",
-        "tiruchi",
-    ],
-
-    "Salem": [
-        "salem",
-    ],
-
-    "Erode": [
-        "erode",
-    ],
-
-    "Tirunelveli": [
-        "tirunelveli",
-        "nellai",
-    ],
-
-    "Vellore": [
-        "vellore",
-    ],
-
-    "Kanchipuram": [
-        "kanchipuram",
-        "kancheepuram",
-    ],
-
-    "Tiruvallur": [
-        "tiruvallur",
-        "thiruvallur",
-        "tiruvallur district",
-        "thiruvallur district",
-    ],
-
-    "Chengalpattu": [
-        "chengalpattu",
-        "chengalpet",
-    ],
-
-    "Thanjavur": [
-        "thanjavur",
-        "tanjore",
-    ],
-
-    "Dindigul": [
-        "dindigul",
-    ],
-
-    "Thoothukudi": [
-        "thoothukudi",
-        "tuticorin",
-    ],
-
-    "Virudhunagar": [
-        "virudhunagar",
-    ],
-
-    "Namakkal": [
-        "namakkal",
-    ],
-
-    "Karur": [
-        "karur",
-    ],
-
-    "Cuddalore": [
-        "cuddalore",
-    ],
-
-    "Dharmapuri": [
-        "dharmapuri",
-    ],
-
-    "Krishnagiri": [
-        "krishnagiri",
-    ],
-
-    "Pudukkottai": [
-        "pudukkottai",
-    ],
-
-    "Ramanathapuram": [
-        "ramanathapuram",
-        "ramnad",
-    ],
-
-    "Sivaganga": [
-        "sivaganga",
-    ],
-
-    "Tenkasi": [
-        "tenkasi",
-    ],
-
-    "The Nilgiris": [
-        "nilgiris",
-        "ooty",
-    ],
-
-    "Tiruppur": [
-        "tiruppur",
-    ],
-
-    "Ariyalur": [
-        "ariyalur",
-    ],
-
-    "Perambalur": [
-        "perambalur",
-    ],
-
-    "Nagapattinam": [
-        "nagapattinam",
-    ],
-
-    "Mayiladuthurai": [
-        "mayiladuthurai",
-    ],
-
-    "Villupuram": [
-        "villupuram",
-        "viluppuram",
-    ],
-
-    "Kallakurichi": [
-        "kallakurichi",
-    ],
 }
 
 
 # ============================================================
-# TEXT CLEANING
+# BASIC TEXT FUNCTIONS
 # ============================================================
 
-def clean_text(value) -> str:
+def clean(value):
 
-    if value is None:
+    if value is None or pd.isna(value):
         return ""
-
-    try:
-        if pd.isna(value):
-            return ""
-    except Exception:
-        pass
 
     return re.sub(
         r"\s+",
@@ -355,16 +486,19 @@ def clean_text(value) -> str:
     ).strip()
 
 
-def normalize_text(value) -> str:
+def norm(value):
 
-    text = clean_text(value).lower()
+    text = clean(value)
 
-    text = text.replace("&", " and ")
+    text = text.lower()
 
-    text = text.replace("+", " plus ")
+    text = text.replace(
+        "&",
+        " and "
+    )
 
     text = re.sub(
-        r"[^a-z0-9]+",
+        r"[^a-z0-9\s-]",
         " ",
         text
     )
@@ -376,919 +510,731 @@ def normalize_text(value) -> str:
     ).strip()
 
 
-def phrase_matches(
-    text: str,
-    phrase: str
-) -> bool:
+def has_phrase(
+    text,
+    phrase
+):
 
-    text = normalize_text(text)
+    text = norm(text)
 
-    phrase = normalize_text(
-        phrase
-    )
+    phrase = norm(phrase)
 
     if not text or not phrase:
         return False
 
-    pattern = (
-        r"(?<![a-z0-9])"
-        + re.escape(phrase)
-        + r"(?![a-z0-9])"
+    return (
+        re.search(
+            r"(?<![a-z0-9])"
+            + re.escape(phrase)
+            + r"(?![a-z0-9])",
+            text
+        )
+        is not None
     )
-
-    return re.search(
-        pattern,
-        text
-    ) is not None
 
 
 # ============================================================
-# CATEGORY
+# FIND DATASET COLUMN
 # ============================================================
 
-def normalize_category(
-    value: str
-) -> Optional[str]:
+def find_col(
+    df,
+    names
+):
 
-    text = normalize_text(
-        value
-    )
-
-    for category, aliases in CATEGORY_ALIASES.items():
-
-        if text == normalize_text(
-            category
-        ):
-            return category
-
-        for alias in aliases:
-
-            if text == normalize_text(
-                alias
-            ):
-                return category
-
-    return None
-
-
-def extract_category(
-    text: str
-) -> Optional[str]:
-
-    normalized = normalize_text(
-        text
-    )
-
-    candidates = []
-
-    for category, aliases in CATEGORY_ALIASES.items():
-
-        for alias in aliases:
-
-            if phrase_matches(
-                normalized,
-                alias
-            ):
-
-                candidates.append(
-                    (
-                        len(
-                            normalize_text(
-                                alias
-                            )
-                        ),
-                        category
-                    )
-                )
-
-    if candidates:
-
-        return max(
-            candidates
-        )[1]
-
-    return None
-
-
-# ============================================================
-# BRANCH
-# ============================================================
-
-def normalize_branch(
-    value: str
-) -> Optional[str]:
-
-    text = normalize_text(
-        value
-    )
-
-    if not text:
-        return None
-
-    for canonical, aliases in BRANCH_ALIASES.items():
-
-        if text == normalize_text(
-            canonical
-        ):
-            return canonical
-
-        for alias in aliases:
-
-            if text == normalize_text(
-                alias
-            ):
-                return canonical
-
-    return None
-
-
-def extract_branch(
-    text: str
-) -> Optional[str]:
-
-    normalized = normalize_text(
-        text
-    )
-
-    candidates = []
-
-    for canonical, aliases in BRANCH_ALIASES.items():
-
-        for alias in aliases:
-
-            if phrase_matches(
-                normalized,
-                alias
-            ):
-
-                candidates.append(
-                    (
-                        len(
-                            normalize_text(
-                                alias
-                            )
-                        ),
-                        canonical
-                    )
-                )
-
-    if candidates:
-
-        return max(
-            candidates
-        )[1]
-
-    return None
-
-
-def branch_matches(
-    actual_branch: str,
-    requested_branch: str
-) -> bool:
-
-    actual = normalize_text(
-        actual_branch
-    )
-
-    requested = normalize_branch(
-        requested_branch
-    )
-
-    if not requested:
-        return False
-
-    if requested == "CSE":
-
-        return (
-            "computer science and engineering"
-            in actual
-        )
-
-    if requested == "IT":
-
-        return (
-            "information technology"
-            in actual
-        )
-
-    if requested == "AI_DS":
-
-        return (
-            "artificial intelligence and data science"
-            in actual
-            or
-            "ai and data science"
-            in actual
-        )
-
-    if requested == "AI_ML":
-
-        return (
-            "artificial intelligence and machine learning"
-            in actual
-            or
-            "ai and machine learning"
-            in actual
-        )
-
-    if requested == "ECE":
-
-        return (
-            "electronics and communication"
-            in actual
-        )
-
-    if requested == "EEE":
-
-        return (
-            "electrical and electronics"
-            in actual
-        )
-
-    mapping = {
-
-        "MECHANICAL":
-            "mechanical engineering",
-
-        "CIVIL":
-            "civil engineering",
-
-        "AERONAUTICAL":
-            "aeronautical engineering",
-
-        "AEROSPACE":
-            "aerospace engineering",
-
-        "BIOTECHNOLOGY":
-            "biotechnology",
-
-        "CHEMICAL":
-            "chemical engineering",
-
-        "AGRICULTURAL":
-            "agricultural engineering",
+    columns = {
+        norm(column): column
+        for column in df.columns
     }
 
-    expected = mapping.get(
-        requested
-    )
+    for name in names:
 
-    if expected:
+        key = norm(name)
 
-        return expected in actual
+        if key in columns:
 
-    return False
-
-
-# ============================================================
-# DISTRICT EXTRACTION
-# ============================================================
-
-def extract_location(
-    text: str
-) -> Optional[str]:
-
-    normalized = normalize_text(
-        text
-    )
-
-    candidates = []
-
-    for district, aliases in DISTRICT_ALIASES.items():
-
-        for alias in aliases:
-
-            if phrase_matches(
-                normalized,
-                alias
-            ):
-
-                candidates.append(
-                    (
-                        len(
-                            normalize_text(
-                                alias
-                            )
-                        ),
-                        district
-                    )
-                )
-
-    if candidates:
-
-        return max(
-            candidates
-        )[1]
+            return columns[key]
 
     return None
 
 
 # ============================================================
-# DISTRICT NORMALIZATION
-# ============================================================
-
-def normalize_district(
-    value: str
-) -> Optional[str]:
-
-    if not value:
-        return None
-
-    text = normalize_text(
-        value
-    )
-
-    for district, aliases in DISTRICT_ALIASES.items():
-
-        if text == normalize_text(
-            district
-        ):
-            return district
-
-        for alias in aliases:
-
-            if text == normalize_text(
-                alias
-            ):
-                return district
-
-    return clean_text(
-        value
-    )
-
-
-# ============================================================
-# STRICT DISTRICT MATCH
-# ============================================================
-
-def district_matches(
-    actual_district: str,
-    requested_district: str
-) -> bool:
-
-    if not actual_district:
-        return False
-
-    requested = normalize_district(
-        requested_district
-    )
-
-    actual = normalize_district(
-        actual_district
-    )
-
-    if not requested or not actual:
-        return False
-
-    return (
-        normalize_text(actual)
-        ==
-        normalize_text(requested)
-    )
-
-
-# ============================================================
-# CUTOFF EXTRACTION
+# EXTRACT CUTOFF
 # ============================================================
 
 def extract_cutoff(
-    text: str
-) -> Optional[float]:
+    text
+):
+
+    text = text.lower()
 
     patterns = [
 
         r"(?:cut[\s-]?off|cutoff)"
-        r"\s*(?:is|was|of|=|:|-)?\s*"
+        r"\s*(?:is|was|=|:)?\s*"
         r"(\d{2,3}(?:\.\d+)?)",
 
         r"(?:score|scored|mark|marks)"
-        r"\s*(?:is|was|of|=|:|-)?\s*"
+        r"\s*(?:is|was|of|=|:)?\s*"
         r"(\d{2,3}(?:\.\d+)?)",
 
+        r"\b(\d{2,3}(?:\.\d+)?)"
+        r"\s*(?:cut[\s-]?off|cutoff|marks?|score)\b",
     ]
 
     for pattern in patterns:
 
-        match = re.search(
+        matches = re.findall(
             pattern,
-            text,
-            flags=re.I
+            text
         )
 
-        if match:
+        for value in matches:
 
             try:
 
-                value = float(
-                    match.group(1)
-                )
+                value = float(value)
 
-                if 50 <= value <= 200:
+                if 0 <= value <= 200:
 
                     return value
 
-            except Exception:
+            except ValueError:
+
                 pass
 
-    numbers = re.findall(
+    # Fallback for:
+    # "I got 189"
+    for value in re.findall(
         r"\b\d{2,3}(?:\.\d+)?\b",
         text
-    )
-
-    for raw in numbers:
+    ):
 
         try:
 
-            value = float(
-                raw
-            )
+            value = float(value)
 
             if 50 <= value <= 200:
 
                 return value
 
-        except Exception:
+        except ValueError:
+
             pass
 
     return None
 
 
 # ============================================================
-# CURRENT MESSAGE DETAILS
+# GENERIC ALIAS EXTRACTION
 # ============================================================
 
-def extract_current_details(
-    text: str
-) -> Dict:
+def extract_from_aliases(
+    text,
+    aliases
+):
 
-    details = {}
+    text = norm(text)
 
-    cutoff = extract_cutoff(
-        text
+    ordered = sorted(
+        aliases.items(),
+        key=lambda item:
+            max(
+                len(norm(x))
+                for x in item[1]
+            ),
+        reverse=True
     )
 
-    if cutoff is not None:
+    for key, values in ordered:
 
-        details["cutoff"] = cutoff
+        for value in values:
 
-    category = extract_category(
-        text
+            if has_phrase(
+                text,
+                value
+            ):
+
+                return key
+
+    return None
+
+
+def extract_category(
+    text
+):
+
+    return extract_from_aliases(
+        text,
+        CATEGORIES_ALIASES
     )
 
-    if category:
 
-        details["category"] = category
+def extract_branch(
+    text
+):
 
-    branch = extract_branch(
-        text
+    return extract_from_aliases(
+        text,
+        BRANCHES
     )
 
-    if branch:
 
-        details["branch"] = branch
+def extract_location(
+    text
+):
 
-    location = extract_location(
-        text
+    return extract_from_aliases(
+        text,
+        DISTRICTS
     )
-
-    if location:
-
-        details["location"] = location
-
-    return details
-
-
-# ============================================================
-# FOLLOW-UP
-# ============================================================
-
-def is_followup(
-    text: str
-) -> bool:
-
-    normalized = normalize_text(
-        text
-    )
-
-    followup_phrases = [
-
-        "what about",
-
-        "how about",
-
-        "same cutoff",
-
-        "same mark",
-
-        "same marks",
-
-        "same score",
-
-        "same branch",
-
-        "same location",
-
-        "same college",
-
-        "and in",
-
-        "then in",
-
-        "for the same",
-
-        "with the same",
-    ]
-
-    for phrase in followup_phrases:
-
-        if phrase in normalized:
-
-            return True
-
-    words = normalized.split()
-
-    if len(words) <= 4:
-
-        if (
-            extract_category(text)
-            or
-            extract_branch(text)
-            or
-            extract_location(text)
-        ):
-
-            return True
-
-    return False
 
 
 # ============================================================
-# DETAILS + HISTORY
+# EXTRACT COLLEGE TYPE
 # ============================================================
 
-def extract_details(
-    text: str,
-    history=None
-) -> Dict:
+def extract_type(
+    text
+):
 
-    current = extract_current_details(
-        text
-    )
+    text = norm(text)
 
-    # --------------------------------------------------------
-    # New question.
-    # --------------------------------------------------------
-
-    if not is_followup(text):
-
-        return current
-
-    previous = {}
-
-    if history:
-
-        for message in reversed(
-            history
-        ):
-
-            if message.get(
-                "role"
-            ) != "user":
-
-                continue
-
-            previous_text = (
-                message.get(
-                    "content",
-                    ""
-                )
-                or
-                ""
-            ).strip()
-
-            if not previous_text:
-
-                continue
-
-            old_details = (
-                extract_current_details(
-                    previous_text
-                )
-            )
-
-            for key, value in old_details.items():
-
-                if key not in previous:
-
-                    previous[key] = value
-
-            if len(previous) >= 4:
-
-                break
-
-    details = dict(
-        previous
-    )
-
-    # Current message ALWAYS wins.
-    details.update(
-        current
-    )
-
-    return details
-
-
-# ============================================================
-# FIND COLUMN
-# ============================================================
-
-def find_column(
-    df: pd.DataFrame,
-    names: List[str]
-) -> Optional[str]:
-
-    normalized_columns = {
-
-        normalize_text(column):
-            column
-
-        for column in df.columns
-    }
-
-    for name in names:
-
-        key = normalize_text(
-            name
+    aided = any(
+        has_phrase(
+            text,
+            value
         )
+        for value in TYPE_ALIASES["AIDED"]
+    )
 
-        if key in normalized_columns:
+    autonomous = any(
+        has_phrase(
+            text,
+            value
+        )
+        for value in TYPE_ALIASES["AUTONOMOUS"]
+    )
 
-            return normalized_columns[
-                key
-            ]
+    government = any(
+        has_phrase(
+            text,
+            value
+        )
+        for value in TYPE_ALIASES["GOVERNMENT"]
+    )
+
+    if aided:
+
+        return "GOVERNMENT_AIDED"
+
+    if autonomous and government:
+
+        return "AUTONOMOUS_GOVERNMENT"
+
+    if autonomous:
+
+        return "AUTONOMOUS"
+
+    if government:
+
+        return "GOVERNMENT"
 
     return None
 
 
 # ============================================================
-# COLLEGE LOCATION FALLBACK
+# EXPLICIT DISTRICT FROM ADDRESS
 # ============================================================
 
-def extract_location_from_college_name(
-    college_name: str
-) -> str:
+def explicit_district(
+    address
+):
 
-    text = normalize_text(
-        college_name
-    )
+    text = norm(address)
 
-    candidates = []
+    found = []
 
-    for district, aliases in DISTRICT_ALIASES.items():
+    for district, aliases in DISTRICTS.items():
 
         for alias in aliases:
 
-            if phrase_matches(
-                text,
-                alias
+            alias = norm(alias)
+
+            pattern = (
+                r"(?<![a-z0-9])"
+                + re.escape(alias)
+                + r"\s+"
+                r"(?:district|dist|dt)\b"
+            )
+
+            for match in re.finditer(
+                pattern,
+                text
             ):
 
-                candidates.append(
+                found.append(
                     (
-                        len(
-                            normalize_text(
-                                alias
-                            )
-                        ),
+                        match.start(),
                         district
                     )
                 )
 
-    if candidates:
+    if not found:
 
-        return max(
-            candidates
-        )[1]
+        return None
+
+    found.sort(
+        key=lambda item:
+        item[0]
+    )
+
+    return found[-1][1]
+
+
+# ============================================================
+# PINCODES
+# ============================================================
+
+def pins(
+    address
+):
+
+    return re.findall(
+        r"\b\d{6}\b",
+        clean(address)
+    )
+
+
+# ============================================================
+# BUILD EXACT PIN -> DISTRICT MAP
+# ============================================================
+
+def build_pin_map(
+    df,
+    college_col
+):
+
+    counts = defaultdict(
+        Counter
+    )
+
+    for address in df[
+        college_col
+    ].fillna("").astype(str):
+
+        district = explicit_district(
+            address
+        )
+
+        if not district:
+
+            continue
+
+        for pin in pins(
+            address
+        ):
+
+            counts[
+                pin
+            ][district] += 1
+
+    result = {}
+
+    for pin, counter in counts.items():
+
+        # Only use an exact mapping when the
+        # Excel itself gives one district for
+        # that PIN.
+        if len(counter) == 1:
+
+            result[pin] = (
+                counter
+                .most_common(1)[0][0]
+            )
+
+    return result
+
+
+# ============================================================
+# FIND DISTRICT OF A COLLEGE
+# ============================================================
+
+def college_district(
+    address,
+    pin_map
+):
+
+    address = clean(
+        address
+    )
+
+    if not address:
+
+        return "Not specified"
+
+    text = norm(
+        address
+    )
+
+    # --------------------------------------------------------
+    # CURRENT DISTRICT OVERRIDES
+    # --------------------------------------------------------
+
+    current_hints = {
+
+        "Kallakurichi": [
+            "kallakurichi",
+            "chinnasalem",
+        ],
+
+        "Mayiladuthurai": [
+            "mayiladuthurai",
+            "mayavaram",
+        ],
+
+        "Tenkasi": [
+            "tenkasi",
+            "ayikudy",
+        ],
+
+        "Tirupattur": [
+            "tirupattur",
+            "tirupathur",
+        ],
+
+        "Perambalur": [
+            "perambalur",
+            "elambalur",
+        ],
+    }
+
+    for district, hints in current_hints.items():
+
+        if any(
+            has_phrase(
+                text,
+                hint
+            )
+            for hint in hints
+        ):
+
+            return district
+
+    # --------------------------------------------------------
+    # EXPLICIT DISTRICT
+    # --------------------------------------------------------
+
+    district = explicit_district(
+        address
+    )
+
+    if district:
+
+        return district
+
+    # --------------------------------------------------------
+    # CHENGALPATTU SPECIAL CASE
+    # --------------------------------------------------------
+    # Example:
+    # Siruseri, Egattur, Chennai-603103
+    #
+    # This must not become Chennai merely because
+    # "Chennai" appears in the address.
+    # --------------------------------------------------------
+
+    if any(
+        has_phrase(
+            text,
+            hint
+        )
+        for hint in CHENGALPATTU_HINTS
+    ):
+
+        return "Chengalpattu"
+
+    # --------------------------------------------------------
+    # EXACT PIN LEARNED FROM EXCEL
+    # --------------------------------------------------------
+
+    for pin in reversed(
+        pins(address)
+    ):
+
+        if pin in pin_map:
+
+            return pin_map[pin]
+
+    # --------------------------------------------------------
+    # BROAD PIN FALLBACK
+    # --------------------------------------------------------
+
+    for pin in reversed(
+        pins(address)
+    ):
+
+        prefix = pin[:3]
+
+        if prefix in PIN_PREFIX:
+
+            return PIN_PREFIX[
+                prefix
+            ]
+
+    # --------------------------------------------------------
+    # LAST LOCATION MENTION
+    # --------------------------------------------------------
+
+    matches = []
+
+    for district, aliases in DISTRICTS.items():
+
+        for alias in aliases:
+
+            alias = norm(alias)
+
+            pattern = (
+                r"(?<![a-z0-9])"
+                + re.escape(alias)
+                + r"(?![a-z0-9])"
+            )
+
+            for match in re.finditer(
+                pattern,
+                text
+            ):
+
+                matches.append(
+                    (
+                        match.start(),
+                        len(alias),
+                        district
+                    )
+                )
+
+    if matches:
+
+        matches.sort(
+            key=lambda item:
+            (
+                item[0],
+                item[1]
+            )
+        )
+
+        return matches[-1][2]
 
     return "Not specified"
 
 
 # ============================================================
-# RECOMMENDATION INTENT
+# BRANCH MATCHING
 # ============================================================
 
-def recommendation_requested(
-    text: str,
-    details: Dict
-) -> bool:
+def branch_matches(
+    actual,
+    requested
+):
 
-    normalized = normalize_text(
-        text
+    actual = norm(
+        actual
     )
 
-    informational = [
+    exact = {
 
-        "what is",
+        "CSE": [
+            "computer science and engineering",
+            "computer science and engineering ss",
+        ],
 
-        "what are",
+        "IT": [
+            "information technology",
+            "information technology ss",
+        ],
 
-        "explain",
+        "AI_DS": [
+            "artificial intelligence and data science",
+            "artificial intelligence and data science ss",
+        ],
 
-        "define",
+        "AI_ML": [
+            "artificial intelligence and machine learning",
+            "artificial intelligence and machine learning ss",
+        ],
 
-        "tell me about",
+        "ECE": [
+            "electronics and communication engineering",
+            "electronics and communication engineering ss",
+        ],
 
-        "how does",
+        "EEE": [
+            "electrical and electronics engineering",
+            "electrical and electronics engineering ss",
+        ],
 
-        "how do",
+        "MECHANICAL": [
+            "mechanical engineering",
+            "mechanical engineering ss",
+        ],
 
-        "why is",
+        "CIVIL": [
+            "civil engineering",
+            "civil engineering ss",
+        ],
 
-        "why are",
-    ]
+        "AERONAUTICAL": [
+            "aeronautical engineering",
+        ],
 
-    if any(
-        normalized.startswith(
-            phrase
+        "AEROSPACE": [
+            "aerospace engineering",
+        ],
+
+        "BIOTECHNOLOGY": [
+            "biotechnology",
+            "biotechnology ss",
+        ],
+
+        "CHEMICAL": [
+            "chemical engineering",
+        ],
+
+        "AGRICULTURAL": [
+            "agricultural engineering",
+        ],
+    }
+
+    return (
+        actual
+        in
+        exact.get(
+            requested,
+            []
         )
-        for phrase in informational
-    ):
-
-        return False
-
-    recommendation_phrases = [
-
-        "college",
-
-        "colleges",
-
-        "college option",
-
-        "college options",
-
-        "which college",
-
-        "which colleges",
-
-        "what college",
-
-        "what colleges",
-
-        "recommend",
-
-        "recommendation",
-
-        "recommendations",
-
-        "suggest colleges",
-
-        "college suggestions",
-
-        "possible colleges",
-
-        "eligible colleges",
-
-        "admission chance",
-
-        "admission chances",
-
-        "where can i get",
-
-        "where can i study",
-
-        "can i get",
-
-        "what can i get",
-
-        "my chances",
-
-        "show colleges",
-
-        "list colleges",
-
-        "find colleges",
-
-        "i need college",
-
-        "i need colleges",
-
-        "want college",
-
-        "want colleges",
-    ]
-
-    if any(
-        phrase in normalized
-        for phrase in recommendation_phrases
-    ):
-
-        return True
-
-    if (
-        details.get("cutoff") is not None
-        and
-        (
-            details.get("category")
-            or
-            details.get("branch")
-            or
-            details.get("location")
-        )
-    ):
-
-        return True
-
-    return False
+    )
 
 
 # ============================================================
-# GET RECOMMENDATIONS
+# COLLEGE TYPE DETECTION
+# ============================================================
+
+def college_flags(
+    row
+):
+
+    text_parts = []
+
+    for value in row.tolist():
+
+        if isinstance(
+            value,
+            str
+        ):
+
+            text_parts.append(
+                value
+            )
+
+    text = norm(
+        " ".join(
+            text_parts
+        )
+    )
+
+    aided = any(
+        has_phrase(
+            text,
+            alias
+        )
+        for alias
+        in TYPE_ALIASES[
+            "AIDED"
+        ]
+    )
+
+    autonomous = any(
+        has_phrase(
+            text,
+            alias
+        )
+        for alias
+        in TYPE_ALIASES[
+            "AUTONOMOUS"
+        ]
+    )
+
+    government = any(
+        has_phrase(
+            text,
+            alias
+        )
+        for alias
+        in TYPE_ALIASES[
+            "GOVERNMENT"
+        ]
+    )
+
+    # Government-aided is NOT treated
+    # as plain government.
+    if aided:
+
+        government = False
+
+    return (
+        government,
+        autonomous,
+        aided
+    )
+
+
+# ============================================================
+# MAIN RECOMMENDATION ENGINE
 # ============================================================
 
 def get_recommendations(
-    cutoff: float,
-    category: Optional[str],
-    location: Optional[str] = None,
-    branch: Optional[str] = None
-) -> List[Dict]:
+    cutoff,
+    category,
+    location,
+    branch,
+    college_type=None
+):
 
     try:
 
-        df = load_college_data()
+        df = load_college_data().copy()
 
     except Exception as error:
 
         print(
-            "DATA LOADING ERROR:",
+            "DATA LOAD ERROR:",
             repr(error)
         )
 
         return []
 
-    if (
-        df is None
-        or
-        df.empty
-    ):
-
-        return []
-
-    # ========================================================
-    # COLUMN DETECTION
-    # ========================================================
-
-    college_col = find_column(
-
+    college_col = find_col(
         df,
-
         [
             "College Name",
-            "college name",
-            "college",
-            "institution",
-            "institution name",
+            "college_name",
+            "College",
         ]
     )
 
-    branch_col = find_column(
-
+    branch_col = find_col(
         df,
-
         [
             "Branch",
-            "branch name",
-            "course",
-            "program",
-            "programme",
-        ]
-    )
-
-    # --------------------------------------------------------
-    # THIS IS THE IMPORTANT FIX
-    #
-    # Look for the REAL DISTRICT COLUMN.
-    # --------------------------------------------------------
-
-    district_col = find_column(
-
-        df,
-
-        [
-            "District",
-            "district",
-            "College District",
-            "college district",
+            "branch",
+            "Course",
+            "Program",
         ]
     )
 
     if not college_col:
 
         print(
-            "College Name column not found."
-        )
-
-        print(
-            "Available columns:",
+            "College Name column missing:",
             df.columns.tolist()
         )
 
@@ -1297,7 +1243,8 @@ def get_recommendations(
     if not branch_col:
 
         print(
-            "Branch column not found."
+            "Branch column missing:",
+            df.columns.tolist()
         )
 
         return []
@@ -1306,225 +1253,198 @@ def get_recommendations(
     # CATEGORY
     # ========================================================
 
-    category_was_provided = bool(
-        category
-    )
-
-    normalized_category = (
-        normalize_category(
-            category
-        )
+    category = (
+        category.upper().strip()
         if category
-        else None
+        else "OC"
     )
 
-    # Internal fallback only.
-    internal_category = (
-        normalized_category
-        or
-        "OC"
-    )
+    if category not in CATEGORIES:
 
-    category_col = find_column(
+        category = "OC"
 
+    category_col = find_col(
         df,
-
-        [
-            internal_category
-        ]
+        [category]
     )
 
     if not category_col:
 
-        print(
-            f"Category column "
-            f"{internal_category} not found."
-        )
-
         return []
 
     # ========================================================
-    # COPY DATA
+    # BUILD DISTRICT MAP
     # ========================================================
 
-    work = df.copy()
-
-    work["__college"] = (
-
-        work[college_col]
-        .fillna("")
-        .astype(str)
-        .str.strip()
-    )
-
-    work["__branch"] = (
-
-        work[branch_col]
-        .fillna("")
-        .astype(str)
-        .str.strip()
+    pin_map = build_pin_map(
+        df,
+        college_col
     )
 
     # ========================================================
-    # STRICT DISTRICT FILTER
-    # ========================================================
-    #
-    # BEFORE:
-    #
-    # if location_mask.any():
-    #     work = work[location_mask]
-    #
-    # That was WRONG because if the mask failed, the complete
-    # dataset could remain.
-    #
-    # NOW:
-    #
-    # If a district is requested, every row MUST belong to
-    # that district.
+    # COLLEGE TYPE FILTER
     # ========================================================
 
-    if location:
+    requested_type = (
+        college_type.upper().strip()
+        if college_type
+        else None
+    )
 
-        requested_district = normalize_district(
-            location
+    def type_matches(
+        row
+    ):
+
+        government, autonomous, aided = (
+            college_flags(row)
         )
 
-        print(
-            "REQUESTED DISTRICT:",
-            requested_district
+        # User explicitly asked autonomous.
+        if requested_type == "AUTONOMOUS":
+
+            return autonomous
+
+        # User explicitly asked government.
+        if requested_type == "GOVERNMENT":
+
+            return government
+
+        # User explicitly asked government aided.
+        if requested_type == "GOVERNMENT_AIDED":
+
+            return aided
+
+        # User explicitly asked both.
+        if requested_type == "AUTONOMOUS_GOVERNMENT":
+
+            return (
+                autonomous
+                and
+                government
+            )
+
+        # IMPORTANT:
+        # If user did NOT mention type,
+        # show government + autonomous only.
+        return (
+            government
+            or
+            autonomous
         )
 
-        if district_col:
+    df = df[
+        df.apply(
+            type_matches,
+            axis=1
+        )
+    ].copy()
 
-            # ----------------------------------------------
-            # Use actual District column.
-            # ----------------------------------------------
+    if df.empty:
 
-            work["__district"] = (
-
-                work[district_col]
-                .fillna("")
-                .astype(str)
-                .str.strip()
-            )
-
-            district_mask = (
-
-                work["__district"]
-                .map(
-
-                    lambda value:
-                    district_matches(
-                        value,
-                        requested_district
-                    )
-                )
-            )
-
-            # STRICT FILTER.
-            work = work[
-                district_mask
-            ].copy()
-
-        else:
-
-            # ----------------------------------------------
-            # Dataset has no District column.
-            #
-            # Use college name as fallback.
-            # ----------------------------------------------
-
-            district_mask = (
-
-                work["__college"]
-                .map(
-
-                    lambda value:
-                    any(
-
-                        phrase_matches(
-                            value,
-                            alias
-                        )
-
-                        for alias in
-                        DISTRICT_ALIASES.get(
-                            requested_district,
-                            [
-                                requested_district
-                            ]
-                        )
-                    )
-                )
-            )
-
-            # STRICT FILTER.
-            work = work[
-                district_mask
-            ].copy()
+        return []
 
     # ========================================================
     # BRANCH FILTER
     # ========================================================
 
-    if branch:
-
-        requested_branch = normalize_branch(
-            branch
-        )
-
-        if requested_branch:
-
-            branch_mask = (
-
-                work["__branch"]
-                .map(
-
-                    lambda value:
-                    branch_matches(
-                        value,
-                        requested_branch
-                    )
-                )
+    df = df[
+        df[
+            branch_col
+        ]
+        .fillna("")
+        .map(
+            lambda value:
+            branch_matches(
+                value,
+                branch
             )
+        )
+    ].copy()
 
-            work = work[
-                branch_mask
-            ].copy()
-
-    # ========================================================
-    # NOTHING LEFT
-    # ========================================================
-
-    if work.empty:
+    if df.empty:
 
         return []
+
+    # ========================================================
+    # DISTRICT FILTER
+    # ========================================================
+    # STRICT:
+    # A row must belong to the requested district.
+    # It is NOT allowed to match another district.
+    # ========================================================
+
+    df["__district"] = (
+        df[
+            college_col
+        ]
+        .fillna("")
+        .map(
+            lambda value:
+            college_district(
+                value,
+                pin_map
+            )
+        )
+    )
+
+    if location:
+
+        requested_location = (
+            extract_location(
+                location
+            )
+            or
+            location
+        )
+
+        df = df[
+            df[
+                "__district"
+            ]
+            .map(norm)
+            ==
+            norm(
+                requested_location
+            )
+        ].copy()
+
+        if df.empty:
+
+            return []
 
     # ========================================================
     # CUTOFF
     # ========================================================
 
-    work["__cutoff"] = pd.to_numeric(
+    df["__cutoff"] = pd.to_numeric(
 
-        work[category_col]
+        df[
+            category_col
+        ]
         .astype(str)
         .str.replace(
             "*",
             "",
             regex=False
         )
+        .str.replace(
+            "—",
+            "",
+            regex=False
+        )
         .str.strip(),
 
         errors="coerce"
+
     )
 
-    work = work.dropna(
+    df = df.dropna(
         subset=[
             "__cutoff"
         ]
     ).copy()
 
-    if work.empty:
+    if df.empty:
 
         return []
 
@@ -1532,18 +1452,17 @@ def get_recommendations(
     # DIFFERENCE
     # ========================================================
 
-    work["__difference"] = (
-
+    df["__difference"] = (
         float(cutoff)
         -
-        work["__cutoff"]
+        df["__cutoff"]
     )
 
     # ========================================================
     # CHANCE
     # ========================================================
 
-    def calculate_chance(
+    def chance(
         difference
     ):
 
@@ -1551,122 +1470,111 @@ def get_recommendations(
 
             return "Very High"
 
-        elif difference >= 0:
+        if difference >= 0:
 
             return "High"
 
-        elif difference >= -10:
+        if difference >= -10:
 
             return "Moderate"
 
-        else:
+        return "Low"
 
-            return "Low"
-
-    work["__chance"] = (
-
-        work["__difference"]
-        .map(
-            calculate_chance
-        )
-    )
-
-    # ========================================================
-    # CHANCE ORDER
-    # ========================================================
-
-    chance_order = {
-
-        "Very High": 0,
-
-        "High": 1,
-
-        "Moderate": 2,
-
-        "Low": 3,
-    }
-
-    work["__chance_order"] = (
-
-        work["__chance"]
-        .map(
-            chance_order
-        )
+    df["__chance"] = (
+        df[
+            "__difference"
+        ]
+        .map(chance)
     )
 
     # ========================================================
     # SORT
     # ========================================================
 
-    work = work.sort_values(
+    chance_order = {
+
+        "Very High": 0,
+        "High": 1,
+        "Moderate": 2,
+        "Low": 3,
+    }
+
+    df["__order"] = (
+        df[
+            "__chance"
+        ]
+        .map(
+            chance_order
+        )
+    )
+
+    df = df.sort_values(
 
         [
-            "__chance_order",
+            "__order",
             "__cutoff",
-            "__college",
+            college_col
         ],
 
         ascending=[
             True,
             False,
-            True,
+            True
         ]
+
     )
 
     # ========================================================
     # REMOVE DUPLICATES
     # ========================================================
 
-    work = work.drop_duplicates(
+    df = df.drop_duplicates(
 
         subset=[
-            "__college",
-            "__branch",
+            college_col,
+            branch_col
         ],
 
         keep="first"
+
     )
 
     # ========================================================
-    # RESULTS
+    # RESULT LIST
     # ========================================================
 
     results = []
 
     for rank, (_, row) in enumerate(
-
-        work.iterrows(),
-
+        df.iterrows(),
         start=1
     ):
 
-        college_name = clean_text(
-            row["__college"]
+        government, autonomous, aided = (
+            college_flags(row)
         )
 
-        actual_branch = clean_text(
-            row["__branch"]
-        )
+        if government and autonomous:
 
-        # ----------------------------------------------------
-        # Location shown on card.
-        #
-        # Prefer the actual District column.
-        # ----------------------------------------------------
-
-        if district_col:
-
-            result_location = clean_text(
-                row["__district"]
+            type_name = (
+                "GOVERNMENT AUTONOMOUS"
             )
+
+        elif government:
+
+            type_name = "GOVERNMENT"
+
+        elif autonomous:
+
+            type_name = "AUTONOMOUS"
+
+        elif aided:
+
+            type_name = "GOVERNMENT_AIDED"
 
         else:
 
-            result_location = (
-                extract_location_from_college_name(
-                    college_name
-                )
-            )
+            type_name = "OTHER"
 
         results.append({
 
@@ -1674,21 +1582,43 @@ def get_recommendations(
                 rank,
 
             "college_name":
-                college_name,
+                clean(
+                    row[
+                        college_col
+                    ]
+                ),
 
             "location":
-                result_location,
+                row[
+                    "__district"
+                ],
+
+            "district":
+                row[
+                    "__district"
+                ],
+
+            "college_type":
+                type_name,
 
             "branch":
-                actual_branch,
+                clean(
+                    row[
+                        branch_col
+                    ]
+                ),
 
             "cutoff":
                 float(
-                    row["__cutoff"]
+                    row[
+                        "__cutoff"
+                    ]
                 ),
 
             "chance":
-                row["__chance"],
+                row[
+                    "__chance"
+                ],
 
             "cutoff_difference":
                 round(
@@ -1705,324 +1635,164 @@ def get_recommendations(
 
 
 # ============================================================
-# GENERAL KNOWLEDGE
+# EXTRACT ALL USER DETAILS
 # ============================================================
 
-KNOWLEDGE = {
+def extract_details(
+    text
+):
 
-    "tnea":
-        (
-            "TNEA stands for Tamil Nadu Engineering "
-            "Admissions. It is the admission process "
-            "used for B.E./B.Tech admissions in Tamil Nadu."
-        ),
+    details = {}
 
-    "counselling":
-        (
-            "TNEA counselling is the process through "
-            "which students participate in college and "
-            "branch allotment based on rank, category, "
-            "choices and available seats."
-        ),
+    cutoff = extract_cutoff(
+        text
+    )
 
-    "cutoff":
-        (
-            "A TNEA cutoff is a historical admission "
-            "mark for a particular college, branch and "
-            "category. Previous-year cutoffs are only "
-            "references and do not guarantee admission."
-        ),
-}
+    category = extract_category(
+        text
+    )
 
+    branch = extract_branch(
+        text
+    )
 
-def knowledge_reply(
-    text: str
-) -> str:
+    location = extract_location(
+        text
+    )
 
-    lower = text.lower()
+    college_type = extract_type(
+        text
+    )
 
-    if "tnea" in lower:
+    if cutoff is not None:
 
-        return KNOWLEDGE[
-            "tnea"
-        ]
-
-    if "counselling" in lower:
-
-        return KNOWLEDGE[
-            "counselling"
-        ]
-
-    if (
-        "cutoff" in lower
-        or
-        "cut off" in lower
-    ):
-
-        return KNOWLEDGE[
+        details[
             "cutoff"
-        ]
+        ] = cutoff
 
+    if category:
+
+        details[
+            "category"
+        ] = category
+
+    if branch:
+
+        details[
+            "branch"
+        ] = branch
+
+    if location:
+
+        details[
+            "location"
+        ] = location
+
+    if college_type:
+
+        details[
+            "college_type"
+        ] = college_type
+
+    return details
+
+
+# ============================================================
+# RECOMMENDATION INTENT
+# ============================================================
+
+def recommendation_requested(
+    text,
+    details
+):
+
+    # Example:
+    # "I need CSE in Chennai for 180 cutoff"
     if (
-        (
-            "cse" in lower
-            or
-            "computer science" in lower
-        )
+        details.get("cutoff")
+        is not None
         and
-        (
-            "ai" in lower
-            or
-            "data science" in lower
-        )
+        details.get("branch")
+        is not None
     ):
+
+        return True
+
+    text = norm(
+        text
+    )
+
+    phrases = [
+
+        "college",
+        "colleges",
+        "recommend",
+        "recommendation",
+        "options",
+        "which college",
+        "which colleges",
+        "show colleges",
+        "find colleges",
+        "admission chance",
+
+    ]
+
+    return any(
+        phrase in text
+        for phrase in phrases
+    )
+
+
+# ============================================================
+# FALLBACK GENERAL ANSWER
+# ============================================================
+
+def fallback(
+    text
+):
+
+    text = norm(
+        text
+    )
+
+    if "tnea" in text:
 
         return (
+            "TNEA stands for Tamil Nadu Engineering "
+            "Admissions, the counselling process used "
+            "for B.E./B.Tech admissions in Tamil Nadu."
+        )
 
-            "CSE provides a broader computer-science "
-            "foundation, while AI & DS focuses more on "
-            "data science, machine learning and AI. "
-            "The better choice depends on your career "
-            "interest and the college available."
+    if "counselling" in text:
+
+        return (
+            "TNEA counselling is the college and branch "
+            "allotment process based on rank, choices, "
+            "category and available seats."
+        )
+
+    if "branch" in text:
+
+        return (
+            "Popular branches include CSE, IT, AI & DS, "
+            "ECE, EEE, Mechanical and Civil. The best "
+            "branch depends on your interests and career goals."
         )
 
     return (
-
-        "I can help with TNEA, colleges, cutoffs, "
-        "engineering branches and counselling. "
-        "Tell me your cutoff, community, preferred "
-        "district and branch if you have one."
+        "I'm your College Assistant. Ask me about TNEA, "
+        "colleges, cutoffs, branches, counselling or admissions."
     )
 
 
 # ============================================================
-# NVIDIA RESPONSE
-# ============================================================
-
-def try_nvidia_response(
-    text: str,
-    history: List[Dict],
-    recommendations: List[Dict],
-    category_was_provided: bool = False
-) -> Optional[str]:
-
-    api_key = (
-
-        os.getenv(
-            "NVIDIA_API_KEY"
-        )
-
-        or
-
-        os.getenv(
-            "NIM_API_KEY"
-        )
-    )
-
-    if not api_key:
-
-        return None
-
-    try:
-
-        from openai import OpenAI
-
-    except Exception:
-
-        return None
-
-    try:
-
-        client = OpenAI(
-
-            base_url=os.getenv(
-                "NVIDIA_BASE_URL",
-                "https://integrate.api.nvidia.com/v1"
-            ),
-
-            api_key=api_key
-        )
-
-        model = os.getenv(
-
-            "NVIDIA_MODEL",
-
-            "meta/llama-3.1-8b-instruct"
-        )
-
-        context = ""
-
-        if recommendations:
-
-            context = (
-
-                "\n\nCOLLEGE DATA FROM "
-                "PROJECT DATASET:\n"
-            )
-
-            for row in recommendations[:100]:
-
-                context += (
-
-                    f"{row['rank']}. "
-                    f"{row['college_name']} | "
-                    f"{row['location']} | "
-                    f"{row['branch']} | "
-                    f"Cutoff: {row['cutoff']} | "
-                    f"Chance: {row['chance']}\n"
-                )
-
-        if category_was_provided:
-
-            community_rule = (
-
-                "The student explicitly provided a "
-                "community. You may mention it when "
-                "relevant."
-            )
-
-        else:
-
-            community_rule = (
-
-                "The student did not explicitly provide "
-                "a community. Do not claim that the "
-                "student selected OC."
-            )
-
-        system_prompt = (
-
-            "You are College Assistant for TNEA "
-            "students in Tamil Nadu. "
-
-            "Answer clearly and briefly. "
-
-            "When college records are supplied, use "
-            "ONLY those records. "
-
-            "Never invent college names, cutoff values, "
-            "branches or locations. "
-
-            "Previous-year cutoffs are historical "
-            "references and do not guarantee admission. "
-
-            + community_rule
-
-            +
-
-            "\nThe displayed recommendations are already "
-            "filtered by the requested district and branch. "
-            "Do not introduce colleges from another district."
-
-            + context
-        )
-
-        messages = [
-
-            {
-                "role":
-                    "system",
-
-                "content":
-                    system_prompt,
-            }
-        ]
-
-        if is_followup(text):
-
-            for message in history[-6:]:
-
-                role = message.get(
-                    "role"
-                )
-
-                content = (
-
-                    message.get(
-                        "content",
-                        ""
-                    )
-                    or
-                    ""
-                )
-
-                if (
-                    role
-                    in {
-                        "user",
-                        "assistant"
-                    }
-                    and
-                    content
-                ):
-
-                    messages.append({
-
-                        "role":
-                            role,
-
-                        "content":
-                            content,
-                    })
-
-        messages.append({
-
-            "role":
-                "user",
-
-            "content":
-                text,
-        })
-
-        response = (
-
-            client
-            .chat
-            .completions
-            .create(
-
-                model=model,
-
-                messages=messages,
-
-                temperature=0.2,
-
-                max_tokens=700
-            )
-        )
-
-        answer = (
-
-            response
-            .choices[0]
-            .message
-            .content
-        )
-
-        if answer:
-
-            return answer.strip()
-
-    except Exception as error:
-
-        print(
-            "NVIDIA RESPONSE ERROR:",
-            repr(error)
-        )
-
-    return None
-
-
-# ============================================================
-# MAIN CHATBOT
+# MAIN CHATBOT FUNCTION
 # ============================================================
 
 def answer_question(
     user_input: str,
     history=None
 ) -> Tuple[str, List[Dict]]:
-
-    history = history or []
 
     text = (
         user_input
@@ -2037,21 +1807,7 @@ def answer_question(
             []
         )
 
-    # ========================================================
-    # EXTRACT DETAILS
-    # ========================================================
-
     details = extract_details(
-        text,
-        history
-    )
-
-    print(
-        "===================================="
-    )
-
-    print(
-        "USER QUERY:",
         text
     )
 
@@ -2060,250 +1816,195 @@ def answer_question(
         details
     )
 
-    print(
-        "===================================="
-    )
-
     # ========================================================
-    # INTENT
+    # RECOMMENDATION REQUEST
     # ========================================================
 
-    is_recommendation = (
-
-        recommendation_requested(
-            text,
-            details
-        )
-    )
-
-    # ========================================================
-    # RECOMMENDATION
-    # ========================================================
-
-    if is_recommendation:
+    if recommendation_requested(
+        text,
+        details
+    ):
 
         cutoff = details.get(
             "cutoff"
-        )
-
-        category = details.get(
-            "category"
         )
 
         branch = details.get(
             "branch"
         )
 
+        # IMPORTANT:
+        # None means the user did NOT mention a community.
+        # We never expose OC in the response in this case.
+        category = details.get(
+            "category"
+        )
+
         location = details.get(
             "location"
         )
 
-        category_was_provided = (
-            category is not None
+        college_type = details.get(
+            "college_type"
         )
 
         # ----------------------------------------------------
-        # CUTOFF REQUIRED
+        # CUTOFF MISSING
         # ----------------------------------------------------
 
         if cutoff is None:
 
             return (
-
-                "Sure! I can find suitable colleges "
-                "for you. Please tell me your TNEA "
-                "cutoff or marks."
-
-            ), []
-
-        # ----------------------------------------------------
-        # GET RESULTS
-        # ----------------------------------------------------
-
-        recommendations = (
-
-            get_recommendations(
-
-                cutoff=float(
-                    cutoff
-                ),
-
-                category=category,
-
-                location=location,
-
-                branch=branch
-            )
-        )
-
-        # ====================================================
-        # RESULTS
-        # ====================================================
-
-        if recommendations:
-
-            location_text = ""
-
-            if location:
-
-                location_text = (
-                    f" in {location}"
-                )
-
-            if branch:
-
-                branch_text = (
-                    f" for {branch}"
-                )
-
-            else:
-
-                branch_text = (
-                    " across available branches"
-                )
-
-            if category_was_provided:
-
-                reply = (
-
-                    f"I found "
-                    f"{len(recommendations)} "
-                    f"matching college options"
-                    f"{branch_text} "
-                    f"with a cutoff of "
-                    f"{cutoff} under the "
-                    f"{category} category"
-                    f"{location_text}. "
-
-                    "The results are based on "
-                    "the TNEA cutoff data in "
-                    "your project dataset. "
-                    "Previous-year cutoffs are "
-                    "references only and do not "
-                    "guarantee admission."
-                )
-
-            else:
-
-                reply = (
-
-                    f"I found "
-                    f"{len(recommendations)} "
-                    f"matching college options"
-                    f"{branch_text} "
-                    f"with a cutoff of "
-                    f"{cutoff}"
-                    f"{location_text}. "
-
-                    "The results are based on "
-                    "the TNEA cutoff data in "
-                    "your project dataset. "
-                    "Previous-year cutoffs are "
-                    "references only and do not "
-                    "guarantee admission."
-                )
-
-            # ------------------------------------------------
-            # AI wording is optional.
-            # ------------------------------------------------
-
-            ai_reply = try_nvidia_response(
-
-                text,
-
-                history,
-
-                recommendations,
-
-                category_was_provided
+                "Please tell me your TNEA cutoff or marks "
+                "so I can find matching colleges.",
+                []
             )
 
-            if ai_reply:
+        # ----------------------------------------------------
+        # BRANCH MISSING
+        # ----------------------------------------------------
 
-                reply = ai_reply
+        if branch is None:
 
             return (
-
-                reply,
-
-                recommendations
+                f"I understood your cutoff as {cutoff}. "
+                "Which engineering branch do you want, "
+                "such as CSE, IT, AI & DS, ECE or EEE?",
+                []
             )
 
-        # ====================================================
-        # NO RESULTS
-        # ====================================================
+        # ----------------------------------------------------
+        # FIND COLLEGES
+        # ----------------------------------------------------
 
-        branch_text = (
+        results = get_recommendations(
 
-            branch
-            if branch
-            else
-            "the requested branches"
+            cutoff=float(
+                cutoff
+            ),
+
+            category=category,
+
+            location=location,
+
+            branch=branch,
+
+            college_type=college_type
+
         )
 
-        location_text = (
+        # ----------------------------------------------------
+        # RESPONSE TEXT
+        # ----------------------------------------------------
 
-            f" in {location}"
-            if location
-            else
+        type_text = {
+
+            "AUTONOMOUS":
+                " autonomous",
+
+            "GOVERNMENT":
+                " government",
+
+            "GOVERNMENT_AIDED":
+                " government-aided",
+
+            "AUTONOMOUS_GOVERNMENT":
+                " autonomous government",
+
+        }.get(
+            college_type,
             ""
         )
 
-        if category_was_provided:
+        category_text = ""
 
-            return (
+        if category:
 
-                f"I couldn't find matching colleges "
-                f"for {branch_text} with a cutoff of "
-                f"{cutoff} under the {category} "
-                f"category{location_text}. "
+            category_text = (
+                f" under the {category} category"
+            )
 
-                "I did not include colleges from "
-                "other districts. Try another "
-                "cutoff, branch or district."
+        location_text = ""
 
-            ), []
+        if location:
+
+            location_text = (
+                f" in {location}"
+            )
+
+        # ----------------------------------------------------
+        # RESULTS FOUND
+        # ----------------------------------------------------
+
+        if results:
+
+            reply = (
+
+                f"I found {len(results)} matching"
+                f"{type_text} college options for "
+                f"{branch} with a cutoff of "
+                f"{cutoff}{category_text}"
+                f"{location_text}. "
+
+                "The results are based on the "
+                "TNEA cutoff data in your Excel file. "
+                "Previous-year cutoffs are references "
+                "only and do not guarantee admission."
+
+            )
+
+        # ----------------------------------------------------
+        # NO RESULTS
+        # ----------------------------------------------------
+
+        else:
+
+            reply = (
+
+                f"I couldn't find matching"
+                f"{type_text} colleges for "
+                f"{branch} with a cutoff of "
+                f"{cutoff}{category_text}"
+                f"{location_text}. "
+
+                "You can try another branch, "
+                "location or cutoff."
+
+            )
 
         return (
-
-            f"I couldn't find matching colleges "
-            f"for {branch_text} with a cutoff of "
-            f"{cutoff}{location_text}. "
-
-            "I did not include colleges from "
-            "other districts. Try another "
-            "cutoff, branch or district."
-
-        ), []
+            reply,
+            results
+        )
 
     # ========================================================
     # GENERAL QUESTION
     # ========================================================
 
-    ai_reply = try_nvidia_response(
+    if ask_llm:
 
-        text,
+        try:
 
-        history if is_followup(text)
-        else [],
+            answer = ask_llm(
+                text,
+                history or []
+            )
 
-        [],
+            if answer:
 
-        False
-    )
+                return (
+                    answer,
+                    []
+                )
 
-    if ai_reply:
+        except Exception as error:
 
-        return (
-            ai_reply,
-            []
-        )
+            print(
+                "LLM ERROR:",
+                repr(error)
+            )
 
     return (
-
-        knowledge_reply(
-            text
-        ),
-
+        fallback(text),
         []
     )

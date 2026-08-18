@@ -2,126 +2,139 @@ from pathlib import Path
 import pandas as pd
 
 
-# ============================================================
-# PROJECT DIRECTORIES
-# ============================================================
-
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 
 
-# ============================================================
-# LOAD TNEA EXCEL / CSV DATA
-# ============================================================
+REQUIRED_COLUMNS = {
+    "College Name",
+    "Branch",
+    "OC",
+    "BC",
+    "BCM",
+    "MBC",
+    "SC",
+    "SCA",
+    "ST",
+}
 
-def load_college_data():
 
-    excel_file = DATA_DIR / "college_cutoffs.xlsx"
-    csv_file = DATA_DIR / "college_cutoffs.csv"
+def clean_excel_headers(df):
+    """
+    Fix the TNEA 2025 Excel structure.
 
-    # --------------------------------------------------------
-    # Excel file
-    # --------------------------------------------------------
+    The workbook has:
+        Row 1 -> title
+        Row 2 -> actual column headers
+        Row 3 onward -> data
+    """
 
-    if excel_file.exists():
-
-        # The TNEA Excel file has:
-        # Row 1 -> title
-        # Row 2 -> actual column headers
-        # Row 3 onwards -> college data
-
-        df = pd.read_excel(
-            excel_file,
-            sheet_name=0,
-            header=1
-        )
-
-    # --------------------------------------------------------
-    # CSV fallback
-    # --------------------------------------------------------
-
-    elif csv_file.exists():
-
-        df = pd.read_csv(csv_file)
-
-    else:
-
-        raise FileNotFoundError(
-            "No college dataset found. "
-            "Put college_cutoffs.xlsx inside the data folder."
-        )
-
-    # ========================================================
-    # CLEAN COLUMN NAMES
-    # ========================================================
-
-    df.columns = [
+    # Already correctly loaded
+    current_columns = {
         str(column).strip()
         for column in df.columns
+    }
+
+    if REQUIRED_COLUMNS.issubset(current_columns):
+        df.columns = [
+            str(column).strip()
+            for column in df.columns
+        ]
+        return df
+
+    # Search first few rows for the actual header
+    for row_index in range(min(10, len(df))):
+
+        row_values = {
+            str(value).strip()
+            for value in df.iloc[row_index].tolist()
+        }
+
+        if REQUIRED_COLUMNS.issubset(row_values):
+
+            header = [
+                str(value).strip()
+                for value in df.iloc[row_index].tolist()
+            ]
+
+            cleaned = df.iloc[row_index + 1:].copy()
+
+            cleaned.columns = header
+
+            cleaned = cleaned.reset_index(drop=True)
+
+            return cleaned
+
+    raise ValueError(
+        "Could not find the real TNEA column header row."
+    )
+
+
+def load_college_data():
+    """
+    Load the TNEA college cutoff dataset.
+    """
+
+    DATA_DIR.mkdir(
+        exist_ok=True
+    )
+
+    files = [
+        DATA_DIR / "college_cutoffs.xlsx",
+        DATA_DIR / "college_cutoffs.xls",
+        DATA_DIR / "college_cutoffs.csv",
     ]
 
-    # ========================================================
-    # REMOVE COMPLETELY EMPTY COLUMNS
-    # ========================================================
+    for path in files:
 
-    df = df.dropna(
-        axis=1,
-        how="all"
-    )
+        if not path.exists():
+            continue
 
-    # ========================================================
-    # REMOVE COMPLETELY EMPTY ROWS
-    # ========================================================
+        print(
+            f"Loading college data from: {path}"
+        )
 
-    df = df.dropna(
-        axis=0,
-        how="all"
-    )
+        if path.suffix.lower() == ".csv":
 
-    # ========================================================
-    # CLEAN TEXT COLUMNS
-    # ========================================================
+            df = pd.read_csv(path)
 
-    for column in ["College Name", "Branch"]:
+        else:
 
-        if column in df.columns:
-
-            df[column] = (
-                df[column]
-                .fillna("")
-                .astype(str)
-                .str.strip()
+            # IMPORTANT:
+            # Read without assuming the first row is the header.
+            df = pd.read_excel(
+                path,
+                header=None
             )
 
-    # ========================================================
-    # CLEAN CUTOFF COLUMNS
-    # ========================================================
+        df = clean_excel_headers(
+            df
+        )
 
-    cutoff_columns = [
-        "OC",
-        "BC",
-        "BCM",
-        "MBC",
-        "SC",
-        "SCA",
-        "ST"
-    ]
+        # Remove completely empty rows
+        df = df.dropna(
+            how="all"
+        )
 
-    for column in cutoff_columns:
+        # Clean column names
+        df.columns = [
+            str(column).strip()
+            for column in df.columns
+        ]
 
-        if column in df.columns:
+        print(
+            "Loaded columns:",
+            df.columns.tolist()
+        )
 
-            df[column] = pd.to_numeric(
-                df[column],
-                errors="coerce"
-            )
+        print(
+            "Loaded rows:",
+            len(df)
+        )
 
-    # ========================================================
-    # RESET INDEX
-    # ========================================================
+        return df
 
-    df = df.reset_index(
-        drop=True
+    raise FileNotFoundError(
+        "Put your TNEA Excel file inside the data folder "
+        "and name it college_cutoffs.xlsx"
     )
-
-    return df
