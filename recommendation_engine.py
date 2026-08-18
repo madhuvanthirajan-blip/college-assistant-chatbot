@@ -1,7 +1,261 @@
 import re
+from typing import Optional, List, Dict
+
 import pandas as pd
 
 from data_loader import load_college_data
+
+
+# ============================================================
+# DISTRICT ALIASES
+# ============================================================
+# IMPORTANT:
+# The District column in the source dataset is NOT trusted.
+# District is calculated from the actual college address.
+# ============================================================
+
+DISTRICT_ALIASES = {
+
+    "Ariyalur": [
+        "ariyalur"
+    ],
+
+    "Chengalpattu": [
+        "chengalpattu",
+        "chengalpet",
+        "chengalpat"
+    ],
+
+    "Chennai": [
+        "chennai",
+        "madras"
+    ],
+
+    "Coimbatore": [
+        "coimbatore",
+        "kovai"
+    ],
+
+    "Cuddalore": [
+        "cuddalore"
+    ],
+
+    "Dharmapuri": [
+        "dharmapuri"
+    ],
+
+    "Dindigul": [
+        "dindigul"
+    ],
+
+    "Erode": [
+        "erode"
+    ],
+
+    "Kallakurichi": [
+        "kallakurichi"
+    ],
+
+    "Kancheepuram": [
+        "kancheepuram",
+        "kanchipuram"
+    ],
+
+    "Karur": [
+        "karur"
+    ],
+
+    "Krishnagiri": [
+        "krishnagiri"
+    ],
+
+    "Madurai": [
+        "madurai"
+    ],
+
+    "Mayiladuthurai": [
+        "mayiladuthurai",
+        "mayavaram"
+    ],
+
+    "Nagapattinam": [
+        "nagapattinam"
+    ],
+
+    "Namakkal": [
+        "namakkal"
+    ],
+
+    "Perambalur": [
+        "perambalur"
+    ],
+
+    "Pudukkottai": [
+        "pudukkottai",
+        "pudukottai"
+    ],
+
+    "Ramanathapuram": [
+        "ramanathapuram",
+        "ramnad"
+    ],
+
+    "Ranipet": [
+        "ranipet"
+    ],
+
+    "Salem": [
+        "salem"
+    ],
+
+    "Sivaganga": [
+        "sivaganga",
+        "sivagangai"
+    ],
+
+    "Tenkasi": [
+        "tenkasi"
+    ],
+
+    "Thanjavur": [
+        "thanjavur",
+        "tanjore"
+    ],
+
+    "The Nilgiris": [
+        "nilgiris",
+        "the nilgiris",
+        "ooty",
+        "udhagamandalam"
+    ],
+
+    "Theni": [
+        "theni"
+    ],
+
+    "Thoothukudi": [
+        "thoothukudi",
+        "tuticorin"
+    ],
+
+    "Tiruchirappalli": [
+        "tiruchirappalli",
+        "tiruchirapalli",
+        "trichy",
+        "tiruchi"
+    ],
+
+    "Tirunelveli": [
+        "tirunelveli",
+        "nellai"
+    ],
+
+    "Tirupattur": [
+        "tirupattur",
+        "tirupathur"
+    ],
+
+    "Tiruppur": [
+        "tiruppur",
+        "tirupur"
+    ],
+
+    "Tiruvallur": [
+        "tiruvallur",
+        "thiruvallur"
+    ],
+
+    "Tiruvannamalai": [
+        "tiruvannamalai",
+        "thiruvannamalai"
+    ],
+
+    "Tiruvarur": [
+        "tiruvarur",
+        "thiruvarur"
+    ],
+
+    "Vellore": [
+        "vellore"
+    ],
+
+    "Viluppuram": [
+        "viluppuram",
+        "villupuram",
+        "vizhuppuram"
+    ],
+
+    "Virudhunagar": [
+        "virudhunagar"
+    ],
+
+    "Kanyakumari": [
+        "kanyakumari",
+        "nagercoil"
+    ]
+}
+
+
+# ============================================================
+# PIN CODE DISTRICT RULES
+# ============================================================
+# These are used only where the broad PIN prefix is reliable.
+#
+# VERY IMPORTANT:
+#
+# 603xxx -> Chengalpattu
+# 600xxx -> Chennai
+#
+# Therefore:
+#
+# Chennai-603103
+#
+# will NOT be classified as Chennai.
+# It will be classified as Chengalpattu.
+# ============================================================
+
+PIN_PREFIX_DISTRICTS = {
+
+    "603": "Chengalpattu",
+
+    "600": "Chennai",
+
+    "621": "Tiruchirappalli",
+
+    "622": "Pudukkottai",
+
+    "623": "Ramanathapuram",
+
+    "624": "Dindigul",
+
+    "625": "Madurai",
+
+    "626": "Virudhunagar",
+
+    "627": "Tirunelveli",
+
+    "628": "Thoothukudi",
+
+    "629": "Kanyakumari",
+
+    "630": "Sivaganga",
+
+    "635": "Tirupattur",
+
+    "636": "Salem",
+
+    "637": "Namakkal",
+
+    "638": "Erode",
+
+    "639": "Karur",
+
+    "641": "Coimbatore",
+
+    "642": "Coimbatore",
+
+    "643": "The Nilgiris"
+}
 
 
 # ============================================================
@@ -20,153 +274,21 @@ CATEGORY_COLUMNS = [
 
 
 # ============================================================
-# DISTRICT ALIASES
+# CLEAN TEXT
 # ============================================================
 
-DISTRICT_ALIASES = {
+def clean_text(value) -> str:
 
-    "ariyalur":
-        "Ariyalur",
-
-    "chengalpattu":
-        "Chengalpattu",
-
-    "chengalpet":
-        "Chengalpattu",
-
-    "chennai":
-        "Chennai",
-
-    "coimbatore":
-        "Coimbatore",
-
-    "cuddalore":
-        "Cuddalore",
-
-    "dharmapuri":
-        "Dharmapuri",
-
-    "dindigul":
-        "Dindigul",
-
-    "erode":
-        "Erode",
-
-    "kanchipuram":
-        "Kanchipuram",
-
-    "kancheepuram":
-        "Kanchipuram",
-
-    "karur":
-        "Karur",
-
-    "krishnagiri":
-        "Krishnagiri",
-
-    "madurai":
-        "Madurai",
-
-    "nagapattinam":
-        "Nagapattinam",
-
-    "namakkal":
-        "Namakkal",
-
-    "pudukkottai":
-        "Pudukkottai",
-
-    "ramanathapuram":
-        "Ramanathapuram",
-
-    "salem":
-        "Salem",
-
-    "sivaganga":
-        "Sivaganga",
-
-    "sivagangai":
-        "Sivaganga",
-
-    "thanjavur":
-        "Thanjavur",
-
-    "tanjore":
-        "Thanjavur",
-
-    "thoothukudi":
-        "Thoothukudi",
-
-    "tuticorin":
-        "Thoothukudi",
-
-    "tiruchirappalli":
-        "Tiruchirappalli",
-
-    "tiruchirapalli":
-        "Tiruchirappalli",
-
-    "trichy":
-        "Tiruchirappalli",
-
-    "tiruchi":
-        "Tiruchirappalli",
-
-    "tirunelveli":
-        "Tirunelveli",
-
-    "tiruppur":
-        "Tiruppur",
-
-    "tirupur":
-        "Tiruppur",
-
-    "tiruvallur":
-        "Tiruvallur",
-
-    "thiruvallur":
-        "Tiruvallur",
-
-    "vellore":
-        "Vellore",
-
-    "villupuram":
-        "Villupuram",
-
-    "viluppuram":
-        "Villupuram",
-
-    "virudhunagar":
-        "Virudhunagar",
-
-    "mayiladuthurai":
-        "Mayiladuthurai",
-
-    "tenkasi":
-        "Tenkasi",
-
-    "kallakurichi":
-        "Kallakurichi",
-
-    "perambalur":
-        "Perambalur",
-
-    "ranipet":
-        "Ranipet",
-
-    "tirupattur":
-        "Tirupattur"
-}
-
-
-# ============================================================
-# CLEAN VALUE
-# ============================================================
-
-def clean(value):
-
-    if pd.isna(value):
+    if value is None:
         return ""
+
+    try:
+
+        if pd.isna(value):
+            return ""
+
+    except Exception:
+        pass
 
     return str(value).strip()
 
@@ -175,68 +297,45 @@ def clean(value):
 # NORMALIZE TEXT
 # ============================================================
 
-def normalize_text(value):
+def normalize_text(value) -> str:
 
-    value = clean(value)
+    text = clean_text(value)
 
-    value = value.lower()
+    text = text.lower()
 
-    value = value.replace("&", " and ")
-
-    value = re.sub(
-        r"[^a-z0-9\s]",
-        " ",
-        value
+    text = text.replace(
+        "&",
+        " and "
     )
 
-    value = re.sub(
+    text = re.sub(
+        r"[^a-z0-9\s-]",
+        " ",
+        text
+    )
+
+    text = re.sub(
         r"\s+",
         " ",
-        value
+        text
     )
 
-    return value.strip()
+    return text.strip()
 
 
 # ============================================================
 # NORMALIZE DISTRICT
 # ============================================================
 
-def normalize_district(value):
+def normalize_district(value) -> str:
 
     text = normalize_text(value)
 
-    if not text:
-        return ""
-
-    # Direct alias
-    if text in DISTRICT_ALIASES:
-
-        return DISTRICT_ALIASES[text]
-
-
-    # Remove common words around district names
-
     text = re.sub(
-        r"\bdistrict\b",
+        r"\b(district|dist|dt)\b",
         "",
         text
-    ).strip()
-
-
-    text = re.sub(
-        r"\bdist\b",
-        "",
-        text
-    ).strip()
-
-
-    text = re.sub(
-        r"\bdt\b",
-        "",
-        text
-    ).strip()
-
+    )
 
     text = re.sub(
         r"\s+",
@@ -244,13 +343,23 @@ def normalize_district(value):
         text
     ).strip()
 
+    for district, aliases in DISTRICT_ALIASES.items():
 
-    if text in DISTRICT_ALIASES:
+        if text == normalize_text(district):
 
-        return DISTRICT_ALIASES[text]
+            return district
 
+        for alias in aliases:
 
-    return text.title()
+            if text == normalize_text(alias):
+
+                return district
+
+    if text:
+
+        return text.title()
+
+    return ""
 
 
 # ============================================================
@@ -258,9 +367,9 @@ def normalize_district(value):
 # ============================================================
 
 def find_column(
-    df,
-    possible_names
-):
+    df: pd.DataFrame,
+    names: List[str]
+) -> Optional[str]:
 
     normalized_columns = {
 
@@ -271,13 +380,11 @@ def find_column(
 
     }
 
-
-    for name in possible_names:
+    for name in names:
 
         normalized_name = normalize_text(
             name
         )
-
 
         if normalized_name in normalized_columns:
 
@@ -285,15 +392,298 @@ def find_column(
                 normalized_name
             ]
 
+    return None
+
+
+# ============================================================
+# EXTRACT PIN CODE
+# ============================================================
+
+def extract_pincode(
+    text: str
+) -> Optional[str]:
+
+    matches = re.findall(
+        r"\b\d{6}\b",
+        clean_text(text)
+    )
+
+    if not matches:
+
+        return None
+
+    return matches[-1]
+
+
+# ============================================================
+# DISTRICT FROM PIN CODE
+# ============================================================
+
+def district_from_pincode(
+    pincode: Optional[str]
+) -> Optional[str]:
+
+    if not pincode:
+
+        return None
+
+    for prefix, district in PIN_PREFIX_DISTRICTS.items():
+
+        if pincode.startswith(prefix):
+
+            return district
 
     return None
 
 
 # ============================================================
-# NORMALIZE BRANCH
+# EXTRACT DISTRICT FROM ADDRESS
 # ============================================================
 
-def normalize_branch(value):
+def extract_district_from_address(
+    address: str
+) -> str:
+
+    original = clean_text(
+        address
+    )
+
+    if not original:
+
+        return "Not specified"
+
+
+    normalized = normalize_text(
+        original
+    )
+
+
+    # ========================================================
+    # RULE 1
+    #
+    # EXPLICIT DISTRICT NAME
+    #
+    # Example:
+    #
+    # Chengalpattu District
+    # Kancheepuram District
+    # Cuddalore District
+    #
+    # This has the highest priority.
+    # ========================================================
+
+    explicit_matches = []
+
+
+    for district, aliases in DISTRICT_ALIASES.items():
+
+        for alias in aliases:
+
+            alias_normalized = normalize_text(
+                alias
+            )
+
+            pattern = (
+
+                r"(?<![a-z0-9])"
+
+                +
+
+                re.escape(
+                    alias_normalized
+                )
+
+                +
+
+                r"\s+"
+
+                r"(?:district|dist|dt)"
+
+                r"\b"
+
+            )
+
+
+            for match in re.finditer(
+                pattern,
+                normalized,
+                flags=re.IGNORECASE
+            ):
+
+                explicit_matches.append(
+                    (
+                        match.start(),
+                        district
+                    )
+                )
+
+
+    if explicit_matches:
+
+        explicit_matches.sort(
+            key=lambda item: item[0]
+        )
+
+        return explicit_matches[-1][1]
+
+
+    # ========================================================
+    # RULE 2
+    #
+    # PIN CODE
+    #
+    # Example:
+    #
+    # Chennai-603103
+    #
+    # 603103 -> Chengalpattu
+    #
+    # This is the important correction.
+    # ========================================================
+
+    pincode = extract_pincode(
+        original
+    )
+
+
+    pin_district = district_from_pincode(
+        pincode
+    )
+
+
+    if pin_district:
+
+        return pin_district
+
+
+    # ========================================================
+    # RULE 3
+    #
+    # DISTRICT/CITY NAME IN ADDRESS
+    # ========================================================
+
+    location_matches = []
+
+
+    for district, aliases in DISTRICT_ALIASES.items():
+
+        for alias in aliases:
+
+            alias_normalized = normalize_text(
+                alias
+            )
+
+
+            pattern = (
+
+                r"(?<![a-z0-9])"
+
+                +
+
+                re.escape(
+                    alias_normalized
+                )
+
+                +
+
+                r"(?![a-z0-9])"
+
+            )
+
+
+            for match in re.finditer(
+                pattern,
+                normalized,
+                flags=re.IGNORECASE
+            ):
+
+                location_matches.append(
+                    (
+                        match.start(),
+                        len(alias_normalized),
+                        district
+                    )
+                )
+
+
+    if location_matches:
+
+        location_matches.sort(
+            key=lambda item: (
+                item[0],
+                item[1]
+            )
+        )
+
+        return location_matches[-1][2]
+
+
+    return "Not specified"
+
+
+# ============================================================
+# CLEAN COLLEGE NAME
+# ============================================================
+
+def extract_clean_college_name(
+    college_name: str
+) -> str:
+
+    text = clean_text(
+        college_name
+    )
+
+    if not text:
+
+        return "Unknown College"
+
+
+    # Keep only the college name.
+    #
+    # The address remains available separately.
+    # ========================================================
+
+    name = text.split(
+        ",",
+        1
+    )[0].strip()
+
+
+    name = re.sub(
+        r"\s+",
+        " ",
+        name
+    )
+
+
+    name = name.strip(
+        " .,-"
+    )
+
+
+    return name or text
+
+
+# ============================================================
+# EXTRACT ADDRESS
+# ============================================================
+
+def extract_address(
+    college_name: str
+) -> str:
+
+    return clean_text(
+        college_name
+    )
+
+
+# ============================================================
+# BRANCH NORMALIZATION
+# ============================================================
+
+def normalize_branch(
+    value
+) -> str:
 
     text = normalize_text(
         value
@@ -302,9 +692,9 @@ def normalize_branch(value):
 
     mapping = {
 
-        # ------------------------------
+        # ----------------------------------------------------
         # CSE
-        # ------------------------------
+        # ----------------------------------------------------
 
         "cse":
             "computer science and engineering",
@@ -321,27 +711,24 @@ def normalize_branch(value):
         "computer science and engineering":
             "computer science and engineering",
 
-        "computer science and engineering ss":
-            "computer science and engineering",
 
-
-        # ------------------------------
+        # ----------------------------------------------------
         # IT
-        # ------------------------------
+        # ----------------------------------------------------
 
         "it":
-            "information technology",
-
-        "information technology":
             "information technology",
 
         "information tech":
             "information technology",
 
+        "information technology":
+            "information technology",
 
-        # ------------------------------
+
+        # ----------------------------------------------------
         # AI & DS
-        # ------------------------------
+        # ----------------------------------------------------
 
         "ai ds":
             "artificial intelligence and data science",
@@ -349,10 +736,7 @@ def normalize_branch(value):
         "ai and ds":
             "artificial intelligence and data science",
 
-        "ai data science":
-            "artificial intelligence and data science",
-
-        "ai and data science":
+        "aids":
             "artificial intelligence and data science",
 
         "artificial intelligence data science":
@@ -361,13 +745,10 @@ def normalize_branch(value):
         "artificial intelligence and data science":
             "artificial intelligence and data science",
 
-        "aids":
-            "artificial intelligence and data science",
 
-
-        # ------------------------------
+        # ----------------------------------------------------
         # AI & ML
-        # ------------------------------
+        # ----------------------------------------------------
 
         "ai ml":
             "artificial intelligence and machine learning",
@@ -375,7 +756,7 @@ def normalize_branch(value):
         "ai and ml":
             "artificial intelligence and machine learning",
 
-        "ai machine learning":
+        "aiml":
             "artificial intelligence and machine learning",
 
         "artificial intelligence machine learning":
@@ -384,24 +765,12 @@ def normalize_branch(value):
         "artificial intelligence and machine learning":
             "artificial intelligence and machine learning",
 
-        "aiml":
-            "artificial intelligence and machine learning",
 
-
-        # ------------------------------
+        # ----------------------------------------------------
         # ECE
-        # ------------------------------
+        # ----------------------------------------------------
 
         "ece":
-            "electronics and communication engineering",
-
-        "electronics":
-            "electronics and communication engineering",
-
-        "electronics communication":
-            "electronics and communication engineering",
-
-        "electronics and communication":
             "electronics and communication engineering",
 
         "electronics communication engineering":
@@ -411,20 +780,11 @@ def normalize_branch(value):
             "electronics and communication engineering",
 
 
-        # ------------------------------
+        # ----------------------------------------------------
         # EEE
-        # ------------------------------
+        # ----------------------------------------------------
 
         "eee":
-            "electrical and electronics engineering",
-
-        "electrical":
-            "electrical and electronics engineering",
-
-        "electrical electronics":
-            "electrical and electronics engineering",
-
-        "electrical and electronics":
             "electrical and electronics engineering",
 
         "electrical electronics engineering":
@@ -434,9 +794,9 @@ def normalize_branch(value):
             "electrical and electronics engineering",
 
 
-        # ------------------------------
+        # ----------------------------------------------------
         # MECHANICAL
-        # ------------------------------
+        # ----------------------------------------------------
 
         "mechanical":
             "mechanical engineering",
@@ -445,9 +805,9 @@ def normalize_branch(value):
             "mechanical engineering",
 
 
-        # ------------------------------
+        # ----------------------------------------------------
         # CIVIL
-        # ------------------------------
+        # ----------------------------------------------------
 
         "civil":
             "civil engineering",
@@ -456,9 +816,9 @@ def normalize_branch(value):
             "civil engineering",
 
 
-        # ------------------------------
+        # ----------------------------------------------------
         # AERONAUTICAL
-        # ------------------------------
+        # ----------------------------------------------------
 
         "aeronautical":
             "aeronautical engineering",
@@ -467,9 +827,9 @@ def normalize_branch(value):
             "aeronautical engineering",
 
 
-        # ------------------------------
+        # ----------------------------------------------------
         # AEROSPACE
-        # ------------------------------
+        # ----------------------------------------------------
 
         "aerospace":
             "aerospace engineering",
@@ -478,9 +838,9 @@ def normalize_branch(value):
             "aerospace engineering",
 
 
-        # ------------------------------
+        # ----------------------------------------------------
         # BIOTECHNOLOGY
-        # ------------------------------
+        # ----------------------------------------------------
 
         "biotech":
             "biotechnology",
@@ -492,9 +852,9 @@ def normalize_branch(value):
             "biotechnology",
 
 
-        # ------------------------------
+        # ----------------------------------------------------
         # CHEMICAL
-        # ------------------------------
+        # ----------------------------------------------------
 
         "chemical":
             "chemical engineering",
@@ -503,9 +863,9 @@ def normalize_branch(value):
             "chemical engineering",
 
 
-        # ------------------------------
+        # ----------------------------------------------------
         # AGRICULTURAL
-        # ------------------------------
+        # ----------------------------------------------------
 
         "agricultural":
             "agricultural engineering",
@@ -522,61 +882,60 @@ def normalize_branch(value):
 
 
 # ============================================================
-# CHANCE CALCULATION
+# BRANCH MATCH
 # ============================================================
 
-def get_chance(
-    student_cutoff,
-    previous_cutoff
-):
+def branch_matches(
+    dataset_branch: str,
+    requested_branch: str
+) -> bool:
 
-    if pd.isna(
-        previous_cutoff
-    ):
+    dataset_normalized = normalize_branch(
+        dataset_branch
+    )
 
-        return "Data unavailable"
-
-
-    difference = (
-        student_cutoff
-        -
-        previous_cutoff
+    requested_normalized = normalize_branch(
+        requested_branch
     )
 
 
-    if difference >= 0:
+    if not dataset_normalized:
 
-        return "Very High"
+        return False
 
-    elif difference >= -5:
 
-        return "High"
+    if not requested_normalized:
 
-    elif difference >= -10:
+        return False
 
-        return "Moderate"
 
-    else:
+    return (
 
-        return "Low"
+        dataset_normalized
+        ==
+        requested_normalized
+
+        or
+
+        requested_normalized
+        in
+        dataset_normalized
+
+    )
 
 
 # ============================================================
 # PREPARE DATA
 # ============================================================
 
-def prepare_data():
-
-    # --------------------------------------------------------
-    # LOAD DATA
-    # --------------------------------------------------------
+def prepare_data() -> pd.DataFrame:
 
     df = load_college_data().copy()
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # CLEAN COLUMN NAMES
-    # --------------------------------------------------------
+    # ========================================================
 
     df.columns = [
 
@@ -587,161 +946,153 @@ def prepare_data():
     ]
 
 
-    # --------------------------------------------------------
-    # FIND IMPORTANT COLUMNS
-    # --------------------------------------------------------
+    # ========================================================
+    # FIND COLLEGE COLUMN
+    # ========================================================
 
-    college_col = find_column(
+    college_column = find_column(
+
         df,
+
         [
             "College Name",
             "college_name",
-            "College"
+            "College",
+            "CollegeName"
         ]
+
     )
 
 
-    branch_col = find_column(
+    if not college_column:
+
+        raise ValueError(
+            "The dataset must contain a College Name column."
+        )
+
+
+    # ========================================================
+    # FIND BRANCH COLUMN
+    # ========================================================
+
+    branch_column = find_column(
+
         df,
+
         [
             "Branch",
-            "branch"
+            "branch",
+            "Branch Name",
+            "Course",
+            "Program"
         ]
+
     )
 
 
-    district_col = find_column(
-        df,
-        [
-            "District",
-            "district",
-            "District Name",
-            "district_name"
-        ]
-    )
-
-
-    # --------------------------------------------------------
-    # REQUIRED COLUMN CHECK
-    # --------------------------------------------------------
-
-    if not college_col:
+    if not branch_column:
 
         raise ValueError(
-            "The dataset must contain a "
-            "'College Name' column."
+            "The dataset must contain a Branch column."
         )
 
 
-    if not branch_col:
-
-        raise ValueError(
-            "The dataset must contain a "
-            "'Branch' column."
-        )
-
-
-    if not district_col:
-
-        raise ValueError(
-            "The dataset must contain a "
-            "'District' column. "
-            "District must come from the "
-            "dataset and must not be guessed "
-            "from the college address."
-        )
-
-
-    # --------------------------------------------------------
-    # STANDARDIZE COLUMN NAMES
-    # --------------------------------------------------------
-
-    if college_col != "College Name":
+    if college_column != "College Name":
 
         df.rename(
+
             columns={
-                college_col:
+                college_column:
                     "College Name"
             },
+
             inplace=True
+
         )
 
 
-    if branch_col != "Branch":
+    if branch_column != "Branch":
 
         df.rename(
+
             columns={
-                branch_col:
+                branch_column:
                     "Branch"
             },
+
             inplace=True
+
         )
 
 
-    if district_col != "District":
-
-        df.rename(
-            columns={
-                district_col:
-                    "District"
-            },
-            inplace=True
-        )
-
-
-    # --------------------------------------------------------
-    # CLEAN COLLEGE NAME
-    # --------------------------------------------------------
+    # ========================================================
+    # CLEAN VALUES
+    # ========================================================
 
     df["College Name"] = (
 
         df["College Name"]
+
         .fillna("")
+
         .astype(str)
+
         .str.strip()
 
     )
 
-
-    # --------------------------------------------------------
-    # CLEAN BRANCH
-    # --------------------------------------------------------
 
     df["Branch"] = (
 
         df["Branch"]
+
         .fillna("")
+
         .astype(str)
+
         .str.strip()
 
     )
 
 
     # ========================================================
-    # IMPORTANT DISTRICT FIX
-    #
-    # USE THE ACTUAL DISTRICT COLUMN FROM EXCEL.
-    #
-    # DO NOT extract district from College Name.
+    # CRITICAL DISTRICT FIX
     # ========================================================
+    #
+    # DO NOT USE:
+    #
+    # df["District"]
+    #
+    # Instead, calculate District from the actual address.
+    #
+    # ========================================================
+
+    df["Address"] = (
+
+        df["College Name"]
+
+        .apply(
+            extract_address
+        )
+
+    )
+
+
+    df["District"] = (
+
+        df["Address"]
+
+        .apply(
+            extract_district_from_address
+        )
+
+    )
+
 
     df["District"] = (
 
         df["District"]
-        .fillna("")
-        .astype(str)
-        .str.strip()
 
-    )
-
-
-    # --------------------------------------------------------
-    # NORMALIZE DISTRICT
-    # --------------------------------------------------------
-
-    df["District_Normalized"] = (
-
-        df["District"]
         .apply(
             normalize_district
         )
@@ -749,51 +1100,110 @@ def prepare_data():
     )
 
 
-    # --------------------------------------------------------
-    # REMOVE ROWS WITHOUT VALID DISTRICT
-    # --------------------------------------------------------
+    # ========================================================
+    # CLEAN DISPLAY NAME
+    # ========================================================
 
-    df = df[
-        df["District_Normalized"]
-        != ""
-    ].copy()
+    df["Display College Name"] = (
 
+        df["College Name"]
 
-    # --------------------------------------------------------
-    # RESET INDEX
-    # --------------------------------------------------------
+        .apply(
+            extract_clean_college_name
+        )
 
-    df.reset_index(
-        drop=True,
-        inplace=True
     )
 
 
-    return df
+    return df.reset_index(
+        drop=True
+    )
 
 
 # ============================================================
-# MAIN RECOMMENDATION FUNCTION
+# CORRECTED DISTRICT LIST
 # ============================================================
 
-def recommend(
-    cutoff,
-    category,
-    district,
-    branch,
-    limit=None
-):
-
-    # --------------------------------------------------------
-    # LOAD DATA
-    # --------------------------------------------------------
+def get_corrected_districts() -> List[str]:
 
     df = prepare_data()
 
 
-    # --------------------------------------------------------
-    # USER INPUT
-    # --------------------------------------------------------
+    districts = sorted({
+
+        district
+
+        for district in df["District"].tolist()
+
+        if district
+        and
+        district != "Not Specified"
+
+    })
+
+
+    return districts
+
+
+# ============================================================
+# CORRECTED DATA
+# ============================================================
+
+def get_corrected_data() -> pd.DataFrame:
+
+    return prepare_data()
+
+
+# ============================================================
+# CHANCE CALCULATION
+# ============================================================
+
+def calculate_chance(
+    difference: float
+) -> str:
+
+    if difference >= 5:
+
+        return "Very High"
+
+
+    elif difference >= 0:
+
+        return "High"
+
+
+    elif difference >= -10:
+
+        return "Moderate"
+
+
+    else:
+
+        return "Low"
+
+
+# ============================================================
+# RECOMMENDATION
+# ============================================================
+
+def recommend(
+    cutoff: float,
+    category: str,
+    district: str,
+    branch: str,
+    limit=None
+) -> List[Dict]:
+
+    # ========================================================
+    # LOAD CORRECTED DATA
+    # ========================================================
+
+    df = prepare_data()
+
+
+    # ========================================================
+    # CUTOFF
+    # ========================================================
 
     try:
 
@@ -809,25 +1219,21 @@ def recommend(
         return []
 
 
+    if not (
+        0 <= student_cutoff <= 200
+    ):
+
+        return []
+
+
+    # ========================================================
+    # CATEGORY
+    # ========================================================
+
     category = str(
-        category
-        or "OC"
+        category or "OC"
     ).strip().upper()
 
-
-    requested_district = normalize_district(
-        district
-    )
-
-
-    requested_branch = normalize_branch(
-        branch
-    )
-
-
-    # ========================================================
-    # CATEGORY CHECK
-    # ========================================================
 
     if category not in CATEGORY_COLUMNS:
 
@@ -835,31 +1241,42 @@ def recommend(
 
 
     # ========================================================
-    # DISTRICT FILTER
+    # DISTRICT
+    # ========================================================
+
+    requested_district = normalize_district(
+        district
+    )
+
+
+    # ========================================================
+    # STRICT DISTRICT FILTER
+    #
+    # The corrected District column is used here.
+    #
+    # If user selects:
+    #
+    # Chengalpattu
+    #
+    # only address-derived Chengalpattu records are returned.
+    #
+    # Chennai records are NOT returned.
     # ========================================================
 
     if requested_district:
 
-        district_mask = (
+        df = df[
 
-            df["District_Normalized"]
+            df["District"]
+
+            .apply(
+                normalize_district
+            )
+
             ==
+
             requested_district
 
-        )
-
-
-        # ----------------------------------------------------
-        # NEVER FALL BACK TO OTHER DISTRICTS
-        # ----------------------------------------------------
-
-        if not district_mask.any():
-
-            return []
-
-
-        df = df[
-            district_mask
         ].copy()
 
 
@@ -867,53 +1284,27 @@ def recommend(
     # BRANCH FILTER
     # ========================================================
 
-    dataset_branches = (
+    df = df[
 
         df["Branch"]
+
         .apply(
-            normalize_branch
-        )
 
-    )
+            lambda value:
 
-
-    branch_mask = (
-
-        dataset_branches
-        ==
-        requested_branch
-
-    )
-
-
-    # --------------------------------------------------------
-    # BRANCH FALLBACK
-    # --------------------------------------------------------
-
-    if not branch_mask.any():
-
-        branch_mask = (
-
-            dataset_branches
-            .str.contains(
-                re.escape(
-                    requested_branch
-                ),
-                na=False,
-                regex=True
+            branch_matches(
+                value,
+                branch
             )
 
         )
 
-
-    df = df[
-        branch_mask
     ].copy()
 
 
-    # --------------------------------------------------------
+    # ========================================================
     # NO RESULTS
-    # --------------------------------------------------------
+    # ========================================================
 
     if df.empty:
 
@@ -921,7 +1312,7 @@ def recommend(
 
 
     # ========================================================
-    # CATEGORY CUTOFF
+    # CATEGORY COLUMN
     # ========================================================
 
     if category not in df.columns:
@@ -929,15 +1320,28 @@ def recommend(
         return []
 
 
-    df["_cutoff"] = pd.to_numeric(
+    # ========================================================
+    # PREVIOUS CUTOFF
+    # ========================================================
+
+    df["__cutoff"] = pd.to_numeric(
 
         df[category]
+
         .astype(str)
+
         .str.replace(
             "*",
             "",
             regex=False
         )
+
+        .str.replace(
+            ",",
+            "",
+            regex=False
+        )
+
         .str.strip(),
 
         errors="coerce"
@@ -946,9 +1350,11 @@ def recommend(
 
 
     df = df.dropna(
+
         subset=[
-            "_cutoff"
+            "__cutoff"
         ]
+
     ).copy()
 
 
@@ -958,14 +1364,29 @@ def recommend(
 
 
     # ========================================================
-    # CUTOFF DIFFERENCE
+    # DIFFERENCE
     # ========================================================
 
-    df["_difference"] = (
+    df["__difference"] = (
 
         student_cutoff
         -
-        df["_cutoff"]
+        df["__cutoff"]
+
+    )
+
+
+    # ========================================================
+    # CHANCE
+    # ========================================================
+
+    df["__chance"] = (
+
+        df["__difference"]
+
+        .apply(
+            calculate_chance
+        )
 
     )
 
@@ -974,31 +1395,24 @@ def recommend(
     # CHANCE ORDER
     # ========================================================
 
-    def chance_order(
-        difference
-    ):
+    chance_order = {
 
-        if difference >= 0:
+        "Very High": 0,
 
-            return 0
+        "High": 1,
 
-        elif difference >= -5:
+        "Moderate": 2,
 
-            return 1
+        "Low": 3
 
-        elif difference >= -10:
-
-            return 2
-
-        else:
-
-            return 3
+    }
 
 
-    df["_chance_order"] = (
+    df["__chance_order"] = (
 
-        df["_difference"]
-        .apply(
+        df["__chance"]
+
+        .map(
             chance_order
         )
 
@@ -1006,21 +1420,29 @@ def recommend(
 
 
     # ========================================================
-    # SORT RESULTS
+    # SORT
     # ========================================================
 
     df = df.sort_values(
 
-        by=[
-            "_chance_order",
-            "_cutoff",
-            "College Name"
+        [
+
+            "__chance_order",
+
+            "__cutoff",
+
+            "Display College Name"
+
         ],
 
         ascending=[
+
             True,
+
             False,
+
             True
+
         ]
 
     )
@@ -1028,15 +1450,16 @@ def recommend(
 
     # ========================================================
     # REMOVE DUPLICATES
-    #
-    # One college + one branch = one result
     # ========================================================
 
     df = df.drop_duplicates(
 
         subset=[
-            "College Name",
+
+            "Display College Name",
+
             "Branch"
+
         ],
 
         keep="first"
@@ -1050,119 +1473,106 @@ def recommend(
 
     if limit is not None:
 
-        df = df.head(
-            int(limit)
-        )
+        try:
+
+            df = df.head(
+                int(limit)
+            )
+
+        except (
+            ValueError,
+            TypeError
+        ):
+
+            pass
 
 
     # ========================================================
-    # BUILD RESULTS
+    # RESULT LIST
     # ========================================================
 
     results = []
 
 
-    for rank, (
-        index,
-        row
-    ) in enumerate(
-
-        df.iterrows(),
-
-        start=1
-
-    ):
+    for _, row in df.iterrows():
 
         previous_cutoff = float(
-            row["_cutoff"]
+            row["__cutoff"]
         )
 
 
-        difference = (
-
-            student_cutoff
-            -
-            previous_cutoff
-
+        difference = float(
+            row["__difference"]
         )
 
 
-        # ----------------------------------------------------
-        # USE ACTUAL EXCEL DISTRICT
-        # ----------------------------------------------------
-
-        actual_district = (
-            clean(
-                row["District"]
-            )
+        result_district = normalize_district(
+            row["District"]
         )
 
 
-        # ----------------------------------------------------
-        # NORMALIZE ONLY FOR DISPLAY
-        # ----------------------------------------------------
+        # ====================================================
+        # FINAL SAFETY CHECK
+        # ====================================================
 
-        display_district = (
+        if requested_district:
 
-            normalize_district(
-                actual_district
-            )
+            if (
+                result_district
+                !=
+                requested_district
+            ):
 
-            or
-
-            actual_district
-
-        )
+                continue
 
 
-        results.append(
+        results.append({
 
-            {
+            "rank":
+                len(results) + 1,
 
-                "rank":
-                    rank,
+            "college_name":
+                clean_text(
+                    row[
+                        "Display College Name"
+                    ]
+                ),
 
+            "address":
+                clean_text(
+                    row[
+                        "Address"
+                    ]
+                ),
 
-                "college_name":
-                    clean(
-                        row["College Name"]
-                    ),
+            "district":
+                result_district,
 
+            "location":
+                result_district,
 
-                "district":
-                    display_district,
+            "branch":
+                clean_text(
+                    row[
+                        "Branch"
+                    ]
+                ),
 
+            "cutoff":
+                previous_cutoff,
 
-                "location":
-                    display_district,
+            "chance":
+                calculate_chance(
+                    difference
+                ),
 
+            "cutoff_difference":
+                round(
+                    difference,
+                    2
+                )
 
-                "branch":
-                    clean(
-                        row["Branch"]
-                    ),
-
-
-                "cutoff":
-                    previous_cutoff,
-
-
-                "chance":
-                    get_chance(
-                        student_cutoff,
-                        previous_cutoff
-                    ),
-
-
-                "cutoff_difference":
-                    round(
-                        difference,
-                        2
-                    )
-
-            }
-
-        )
+        })
 
 
     return results
